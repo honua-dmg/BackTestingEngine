@@ -1,0 +1,6 @@
+pymemcache
+redis
+pandas
+python-dotenv
+numpy
+zoneinfo
