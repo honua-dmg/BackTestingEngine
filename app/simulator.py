@@ -2,54 +2,64 @@ import pandas as pd
 import os
 import time
 import datetime as dt
-import dotenv
-from redis_client import r
+
+from config import r,STOCKS
 import multiprocessing
 
-# Load environment variables
-ENVLOC = '/app/.env'
-dotenv.load_dotenv(ENVLOC)
+
+
 FILEPATH = os.getenv("FILEPATH")
+
+def tokenStockMapping(exchange):
+    """
+    Maps tokens to their corresponding stock symbols.
+    
+    Args:
+        exchange (str): The exchange name ('NSE' or 'BSE').
+    
+    Returns:
+        dict: A dictionary mapping tokens to their stock symbols.
+    """
+    df = pd.read_csv(f"{exchange}.csv")
+    return dict(zip( df['instrument_token'],df['tradingsymbol']))
 
 def get_all_tick_data(date_str):
     """
     Reads all CSV files for a given date, combines them, and sorts by timestamp.
     """
-    all_ticks = []
+    nse = tokenStockMapping('NSE')
+    bse = tokenStockMapping('BSE')
+    tickdata = pd.DataFrame()
     base_path = FILEPATH
     
-    for exchange in ['BSE', 'NSE']:
-        date_path = os.path.join(base_path, exchange, date_str)
-        if not os.path.exists(date_path):
-            print(f"[SIMULATOR] Path not found: {date_path}", flush=True)
-            continue
-            
-        for stock_file in os.listdir(date_path):
-            if stock_file.endswith('.csv'):
-                stock_name = stock_file.replace('.csv', '')
-                try:
-                    df = pd.read_csv(os.path.join(date_path, stock_file))
-                    if not df.empty:
-                        df['stock'] = stock_name
-                        all_ticks.append(df)
-                except pd.errors.EmptyDataError:
-                    print(f"[SIMULATOR] Warning: {stock_file} is empty.", flush=True)
-                    continue
+    for stock in STOCKS:
+        nse_path = os.path.join(base_path, "NSE",stock, f"{date_str}.csv")
+        bse_path = os.path.join(base_path, "BSE",stock, f"{date_str}.csv")
+        nse_data = pd.read_csv(nse_path)
+        nse_data['stonk'] = nse_data['stonk'].apply(lambda x: nse[x])
+        bse_data = pd.read_csv(bse_path)
+        bse_data['stonk'] = bse_data['stonk'].apply(lambda x: bse[x])
+        try:
+            df = pd.concat([nse_data,bse_data],ignore_index=True)
 
-    if not all_ticks:
+            tickdata = pd.concat([tickdata,df],ignore_index=True)
+        except Exception as e:
+            print(f"[SIMULATOR] Error reading {stock} data: {e}")
+
+    if tickdata.empty:
         return None
 
-    full_df = pd.concat(all_ticks)
-    full_df['time'] = pd.to_datetime(full_df['time'])
-    full_df = full_df.sort_values(by='time').reset_index(drop=True)
-    return full_df
+    #tickdata['timestamp'] = pd.to_datetime(tickdata['timestamp'],format='%H:%M:%S')
+    tickdata = tickdata.sort_values(by='timestamp').reset_index(drop=True)
+    print("[INFO] loaded data into memory for simulation")
+    return tickdata
 
 def run_simulation(date_str):
     """
     Runs the market simulation for a given date.
     """
     print(f"[SIMULATOR] Starting market simulation for date: {date_str}", flush=True)
-    
+
     ticks_df = get_all_tick_data(date_str)
     
     if ticks_df is None or ticks_df.empty:
@@ -58,34 +68,16 @@ def run_simulation(date_str):
 
     print(f"[SIMULATOR] Loaded {len(ticks_df)} ticks for simulation.", flush=True)
 
-    last_tick_time = None
-
     for index, row in ticks_df.iterrows():
         if r.get('end') == 'true':
             print("[SIMULATOR] Simulation stopped by 'end' flag.", flush=True)
             break
 
-        current_tick_time = row['time']
-        
-        # Simulate time delay
-        if last_tick_time:
-            delay = (current_tick_time - last_tick_time).total_seconds()
-            # We cap the delay to avoid long waits for market gaps (e.g., overnight)
-            if delay > 0 and delay < 5:
-                time.sleep(delay)
-
-        stock = row['stock']
-        tick_data = {
-            'value': row['value'],
-            'volume': row['volume'],
-            'time': row['time'].strftime('%Y-%m-%d %H:%M:%S')
-        }
+        stock = row['stonk']
+        tick_data = row.to_dict()
         
         r.xadd(stock, tick_data)
-        r.set('time', dt.datetime.now(dt.timezone(dt.timedelta(hours=5, minutes=30))).timestamp()) # Heartbeat
         
-        last_tick_time = current_tick_time
-
         if index > 0 and index % 10000 == 0:
             print(f"[SIMULATOR] Simulated {index}/{len(ticks_df)} ticks...", flush=True)
 
