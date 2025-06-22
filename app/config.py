@@ -1,7 +1,6 @@
 import redis
 import os
 import dotenv
-import pymemcache
 import json
 ENVLOC = '/app/.env'
 dotenv.load_dotenv(ENVLOC)
@@ -20,6 +19,11 @@ r_alg = redis.Redis(
     db=1,
     decode_responses=True
 )
+TEST = "total_stocks"
 FILEPATH = os.getenv("FILEPATH")
+CONFIG_DIR = os.path.dirname(os.path.abspath(__file__))
+STOCKS = list(json.load(open(os.path.join(CONFIG_DIR, "stocks.json")))[TEST].keys())
 
-STOCKS = json.load(open("stocks.json"))['stocks']
+if __name__ == "__main__":
+    
+    print(STOCKS)
