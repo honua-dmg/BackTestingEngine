@@ -4,14 +4,14 @@ import dotenv
 import json
 import threading
 import pandas as pd
-from pymemcache.client.base import Client
+
 import datetime as dt
 import time
 from collections import defaultdict
-from config import r,STOCKS
+from config import r,STOCKS,CONFIG_DIR
 import math
 import logging
-ENVLOC = '/app/.env'
+import csv
 class Consumer():
     def __init__(self,directory,num_consumers):
         """
@@ -21,7 +21,7 @@ class Consumer():
             directory (str): The directory where the CSV files are stored.
             num_consumers (int): The number of consumers to be used.
         """
-        dotenv.load_dotenv( ENVLOC)
+        
         self.directory = directory
         self.num_consumers = num_consumers
         self.nse = self.tokenStockMapping("NSE")
@@ -30,31 +30,27 @@ class Consumer():
         self.consumers = {}
         self.date = dt.datetime.strftime(dt.datetime.now(dt.timezone.utc) + dt.timedelta(hours=5.5),"%Y-%m-%d")
         # Synchronization primitives for safe Rebalancing
-        self.rebalance_interval = 60*60
+        self.rebalance_interval = 60
         self.rebalance_lock = threading.Lock()
         self.rebalance_condition = threading.Condition(self.rebalance_lock) # still don't really understand how this works.
         self.rebalance_in_progress = False
         self.paused_consumers_count = 0
         self.r  = r
         self.r.set('end','false')   
+        self.count_lock = threading.Lock()
+        self.count = 0
+
+        # we'll make consumer groups and oen consumer for each stock
+        for stock in STOCKS:
+            try:
+                self.r.xgroup_create(name=stock,groupname=stock,mkstream=True)
+                self.r.xgroup_createconsumer(name=stock,group=stock,consumername=stock)
+            except Exception as e:
+                #consumer already exists
+                continue
+
     
-        self.stock_list = STOCKS
 
-        #initialised stock offsets in memcached
-        memcached_client = Client(os.getenv('MEMCACHE_HOST','memcache'), os.getenv("MEMCACHE_PORT",11211), encoding='utf-8')
-        for stock in self.stock_list:
-            offset_key = f'stock_offset:{stock}'
-            if memcached_client.get(offset_key) is None:
-                memcached_client.set(offset_key, "0")
-
-        # Add cleanup thread
-        self.cleanup_thread = None 
-        self.cleanup_interval = 60*20  # Run cleanup every 20 minutes
-        self.cleanup_running = False
-        self.cleanup_lag = 100  
-
-        self.simulation_mode = os.getenv("SIMULATION_MODE", "false").lower() == "true"
-    
     def tokenStockMapping(self,exchange):
         """
         Maps tokens to their corresponding stock symbols.
@@ -65,7 +61,7 @@ class Consumer():
         Returns:
             dict: A dictionary mapping tokens to their stock symbols.
         """
-        df = pd.read_csv(f"{exchange}.csv")
+        df = pd.read_csv(os.path.join(CONFIG_DIR, f"{exchange}.csv"))
         return dict(zip( df['instrument_token'],df['tradingsymbol']))
 
     def ConvertToken(self,token):
@@ -83,44 +79,13 @@ class Consumer():
         elif token in self.bse.keys():
             return f"BSE:{self.bse[token]}"
 
-    def start_cleanup_thread(self):
-        """Starts a thread that periodically cleans up Redis streams."""
-
-        def cleanup_loop():
-            memcached_client = Client((os.getenv('MEMCACHE_HOST','memcache'), os.getenv("MEMCACHE_PORT",11211)), encoding='utf-8')
-            logging.info(f"STARTING CLEAN UP AT {dt.datetime.now()}")
-            while self.r.get('end')!='true':
-                time.sleep(self.cleanup_interval)
-                logging.info(f"[CLEANUP] Processing {len(self.stock_list)} stocks for cleanup.")
-                for stock in self.stock_list:
-                    try:
-                        offset_key = f'stock_offset:{stock}'
-                        last_id = memcached_client.get(offset_key)
-                        if not last_id:
-                            continue
-                        
-                        stream_length = self.r.xlen(stock)
-                        if stream_length <= self.cleanup_lag:
-                            continue
-
-                        self.r.xtrim(stock, minid=last_id, approximate=True)
-                        new_length = self.r.xlen(stock)
-                        
-                        logging.info(f"[CLEANUP] Trimmed stream {stock} using minid={last_id}. Previous length: {stream_length}, New length: {new_length}")
-                    except Exception as e:
-                        logging.error(f"[CLEANUP] Error in cleanup loop: {e}")
-                
-        if not self.cleanup_running:
-            self.cleanup_thread = threading.Thread(target=cleanup_loop, daemon=True, name='CleanupManager')
-            self.cleanup_thread.start()
-            logging.info("Cleanup thread started.")
-            self.cleanup_running = True
-
-    def next_redis_id(self,msg_id):
-        if not msg_id or '-' not in msg_id:
-            return "0-0"  # or optionally raise an error
-        ts, seq = map(int, msg_id.split('-'))
-        return f"{ts}-{seq + 1}"
+    def do(self,msg_data):
+        """        
+        with open('test.csv', 'a') as f:
+            # Assuming msg_data is a dictionary of field-value pairs
+            f.write(f"{msg_data}\n")
+            f.flush()"""
+        pass
 
     def CSVConsumer(self,id):
         """
@@ -130,8 +95,7 @@ class Consumer():
             id (int): The ID of the consumer.
         """
         
-        
-        memcached_client = Client((os.getenv('MEMCACHE_HOST','memcache'), os.getenv("MEMCACHE_PORT",11211)), encoding='utf-8')
+        logging.info(f"Consumer {id} started.")
         while self.r.get('end')!='true':
             # Check for rebalancing flag
             with self.rebalance_lock:
@@ -142,33 +106,38 @@ class Consumer():
                     while self.rebalance_in_progress:
                         self.rebalance_condition.wait()
                     logging.info(f"Consumer {id} resuming after rebalancing.")
-
-            for stock in self.consumers[id]:
-                # Construct the key for storing the last processed ID in Redis
-                offset_key = f'stock_offset:{stock}'
                 
-                # Get the last processed message ID for this stock from Memcached, default to "0"
-                last_id = memcached_client.get(offset_key)
-                if last_id is None:
-                    last_id = "0"
+            offset_keys = [stock for stock in self.consumers[id]]
 
                 # Poll Redis for new messages in the stream for this stock
-                messages = self.r.xread({stock: last_id}, count=10, block=1000)
-                
-                if messages == []:
-                    continue
-                #print(messages)
-                for stream in messages:
-                    for uncoded_msg in stream[1]:
-     
-                        msg_id = uncoded_msg[0]
-                        try:
-                            if self.simulation_mode:
-                                time.sleep(.01)
-                                memcached_client.set(offset_key, msg_id)
-                        except Exception as e:
-                            logging.error(f"[ERROR] Failed to process tick {msg_id} for {stream[0]}: {e}")
-                            continue
+            for stock in offset_keys:
+
+                # try to claim messages first
+                _, claimed_messages, _ = self.r.xautoclaim(stock,stock,stock,min_idle_time=0,start_id='0-0')
+                if claimed_messages:
+                        for msg_id,msg_data in claimed_messages:
+                            self.do(msg_data)
+                            with self.count_lock:
+                                self.count += 1
+                            self.r.xack(stock, stock, msg_id)
+                # if no messages are claimed, poll for new messages
+                new_messages = self.r.xreadgroup(groupname=stock,consumername=stock,streams={stock: ">"},block=10)
+            
+                if new_messages:
+                    for _,stream_messages in new_messages:
+                        for msg_id, msg_data in stream_messages:
+                            try:
+                                self.do(msg_data) 
+                                with self.count_lock:
+                                    self.count += 1
+                                self.r.xack(stock, stock, msg_id)
+                            except Exception as e:
+                                logging.error(f"[ERROR] Failed to process tick {msg_id} for {stock}: {e}")
+                                continue
+            with self.count_lock:
+                if self.count % 1000 == 0:
+                    logging.info(f"Consumer {id} processed {self.count} ticks.")
+
         logging.info('ending csvWorker')
 
     def saveData(self):
@@ -176,9 +145,9 @@ class Consumer():
         initialises the CSV files and starts the CSVConsumer threads.
         assigns each thread with an even number of stocks at random.
         """
-        dotenv.load_dotenv(ENVLOC)
-        Save.CSV(self.directory,self.kite).initialise()
-        stock_keys = self.stock_list
+
+
+        stock_keys = STOCKS
         No_stocks = len(stock_keys)
         stocksPerConsumer = math.ceil(No_stocks/self.num_consumers)
         threads = []
@@ -219,7 +188,7 @@ class Consumer():
             logging.info("[REBALANCE] All consumers paused. Rebalancing...")
 
         # --- Rebalancing Logic (can be outside the main lock) ---
-        all_stocks = self.stock_list
+        all_stocks = STOCKS
         logging.info(f"[REBALANCE] COUNT DONE: {dt.datetime.now()} Number of stocks: {len(all_stocks)}")
         bse = []
 
@@ -259,6 +228,8 @@ class Consumer():
         This function is called when the Consumer object is initialized.
         It starts a thread that monitors the CSVConsumer threads and restarts them if they are down.
         """
+
+        #TODO implement thread condition to check if all threads are done, in which case end. 
         def monitor():
             while self.r.get('end')!='true':
                 time.sleep(check_interval)
@@ -273,7 +244,7 @@ class Consumer():
                             thread.start()
         threading.Thread(target=monitor, daemon=True).start()
     
-    def start_scheduler(self, interval=120):
+    def start_scheduler(self):
         """
         Starts a thread that runs the jobscheduler function every hour.
         
@@ -282,10 +253,9 @@ class Consumer():
         """
         def loop():
             while self.r.get('end')!='true' :
-                time.sleep(interval)
+                time.sleep(self.rebalance_interval)
                 self.jobscheduler()
         threading.Thread(target=loop, daemon=True).start()
-
 
 def start_consumer_threads(directory,num_consumers=5):
         """
@@ -312,10 +282,12 @@ def start_consumer_threads(directory,num_consumers=5):
 
 
         # Start core threads
-        t_monitor.start()
-        t_scheduler.start()
+
+        #t_monitor.start()
+        #t_scheduler.start()
         t_save_data.start()
         # Start optional threads
-        consumer.start_cleanup_thread()
+
+        #consumer.start_cleanup_thread()
 
         return [t_save_data]
