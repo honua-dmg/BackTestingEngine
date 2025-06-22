@@ -1,16 +1,17 @@
-import producer
+
 import Consumers 
 import threading
 import datetime as dt
 import time
-import Report
+
 import dotenv
 import os
 import logging
-from upload import Upload
-from config import r,STOCKS
+from config import r,STOCKS,FILEPATH
 import simulator
-
+from pymemcache.client.base import Client
+memcached_client = Client((os.getenv('MEMCACHE_HOST','memcache'), int(os.getenv("MEMCACHE_PORT",11211))), encoding='utf-8')
+PATH = FILEPATH
 """
 tail -f /root/stonks/cron.log - to view live - you can also run docker logs -f stonks_app_1
 """
@@ -22,7 +23,7 @@ def begin():
     This function is called at the beginning of the program. It starts the consumer threads and the producer/simulator.
     """
 
-    
+    r.flushall()
     simulation_date = os.getenv("SIMULATION_DATE")
     if not simulation_date:
         print("[MAIN] Error: SIMULATION_MODE is true but SIMULATION_DATE is not set. Exiting.", flush=True)
@@ -34,15 +35,6 @@ def begin():
     for thread in consumerThreads:
         thread.join()
 
-def end():
-    """
-    Ends the main program.
-    
-    """
-    hours, mins,seconds = dt.datetime.strftime(dt.datetime.now(dt.timezone.utc) + dt.timedelta(hours=5.5),"%H:%M:%S").split(':')
-    if int(hours)>=15 and int(mins)>=30:
-        r.set('end','true')
-        r.flushall() 
 
 if __name__ == "__main__":
     """
@@ -55,16 +47,22 @@ if __name__ == "__main__":
         format='%(asctime)s - %(levelname)s - [%(threadName)s] - %(message)s',
         datefmt='%Y-%m-%d %H:%M:%S'
     )
-    dotenv.load_dotenv(ENVLOC)
-    r.config_set('notify-keyspace-events', 'AKE')
     logging.info("Enabled Redis Keyspace Notifications.")
     logging.info("Starting main program")
     logging.info(f"PATH: {PATH}")
 
 
     # begin runs irrespective of simulation mode. end runs only when not in simulation mode
+    
     logging.info("Starting main program")
     logging.info("Calling begin()")
-    begin()
-    end()
-
+    try:
+        begin()
+    except KeyboardInterrupt:
+        logging.info("[MAIN] Keyboard Interrupt received. Exiting.")
+        r.set('end', 'true')
+        time.sleep(2)
+        print("[MAIN] Flushing redis")
+        r.flushall()
+    
+    logging.info("[MAIN] Exiting.")
