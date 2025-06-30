@@ -4,14 +4,14 @@ import dotenv
 import json
 import threading
 import pandas as pd
-
+import numpy as np
 import datetime as dt
 import time
 from collections import defaultdict
-from config import r,STOCKS,CONFIG_DIR
+from config import r,STOCKS,CONFIG_DIR,DECTECTION_TYPE,VOLUME,TEST
 import math
 import logging
-import csv
+from StockAnalyser import Cumulative_Support
 class Consumer():
     def __init__(self,directory,num_consumers):
         """
@@ -21,13 +21,14 @@ class Consumer():
             directory (str): The directory where the CSV files are stored.
             num_consumers (int): The number of consumers to be used.
         """
-        
+        stocks  = json.load(open(os.path.join(CONFIG_DIR, "stocks.json")))[TEST]
         self.directory = directory
         self.num_consumers = num_consumers
         self.nse = self.tokenStockMapping("NSE")
         self.bse = self.tokenStockMapping("BSE")
 
         self.consumers = {}
+        self.analysers = {}
         self.date = dt.datetime.strftime(dt.datetime.now(dt.timezone.utc) + dt.timedelta(hours=5.5),"%Y-%m-%d")
         # Synchronization primitives for safe Rebalancing
         self.rebalance_interval = 60
@@ -48,8 +49,9 @@ class Consumer():
             except Exception as e:
                 #consumer already exists
                 continue
-
-    
+        for stock in stocks:
+            for exchange in stocks[stock]:
+                self.analysers[f'{exchange}:{stock}'] = Cumulative_Support(detection_type=DECTECTION_TYPE,vol=VOLUME)
 
     def tokenStockMapping(self,exchange):
         """
@@ -85,7 +87,13 @@ class Consumer():
             # Assuming msg_data is a dictionary of field-value pairs
             f.write(f"{msg_data}\n")
             f.flush()"""
-        pass
+
+        # in reality in msg_data we'll get the token, so we'll have to convert hat ourselves manualy
+        #stock = self.ConvertToken(msg_data['token'])
+        stock = msg_data['stonk']
+        self.analysers[stock].parse(msg_data)
+        #print(stock,np.float32(msg_data['last_price']))
+        
 
     def CSVConsumer(self,id):
         """
@@ -116,7 +124,7 @@ class Consumer():
                 _, claimed_messages, _ = self.r.xautoclaim(stock,stock,stock,min_idle_time=0,start_id='0-0')
                 if claimed_messages:
                         for msg_id,msg_data in claimed_messages:
-                            self.do(msg_data)
+                            self.do(msg_data)   
                             with self.count_lock:
                                 self.count += 1
                             self.r.xack(stock, stock, msg_id)

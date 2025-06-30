@@ -19,10 +19,14 @@ r_alg = redis.Redis(
     db=1,
     decode_responses=True
 )
-TEST = "total_stocks"
+TEST = "stocks"
 FILEPATH = os.getenv("FILEPATH")
 CONFIG_DIR = os.path.dirname(os.path.abspath(__file__))
 STOCKS = list(json.load(open(os.path.join(CONFIG_DIR, "stocks.json")))[TEST].keys())
+
+DECTECTION_TYPE = 'buy'
+
+VOLUME = True
 
 if __name__ == "__main__":
     
