@@ -33,7 +33,7 @@ class Algo1(CleanData):
                 none if change in volume is 0
         """
 
-        delta_vol = self.last_traded_vol - int(message['volume_traded'])
+        delta_vol = int(message['volume_traded'])-self.last_traded_vol 
         if delta_vol ==0: return None
         self.last_traded_vol = int(message['volume_traded'])
         #figure out the type:

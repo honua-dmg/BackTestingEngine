@@ -57,7 +57,7 @@ def get_all_tick_data(date_str):
         return None
 
     #tickdata['timestamp'] = pd.to_datetime(tickdata['timestamp'],format='%H:%M:%S')
-    tickdata = tickdata.sort_values(by='timestamp').reset_index(drop=True)
+    tickdata = tickdata.sort_values(by=['timestamp','volume_traded']).reset_index(drop=True)
     print("[INFO] loaded data into memory for simulation")
     return tickdata
 
@@ -82,8 +82,8 @@ def run_simulation(date_str):
 
         stock = row['stonk']
         tick_data = row.to_dict()
-        
-        r.xadd(stock.split(':')[1], tick_data,maxlen=1000)
+        time.sleep(.001)
+        r.xadd(stock.split(':')[1], tick_data,maxlen=10000)
         
         if index > 0 and index % 10000 == 0:
             print(f"[SIMULATOR] Simulated {index}/{len(ticks_df)} ticks...", flush=True)

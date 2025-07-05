@@ -177,7 +177,6 @@ test.ipynb
 test.txt
 *.pyc
 __pycache__/
- app/StockAnalyser.py
-app/StockAnalyser.py
+
 test.csv
 test.csv

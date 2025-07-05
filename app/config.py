@@ -2,6 +2,7 @@ import redis
 import os
 import dotenv
 import json
+import Main
 ENVLOC = '/app/.env'
 dotenv.load_dotenv(ENVLOC)
 # Centralized Redis connection
@@ -19,15 +20,19 @@ r_alg = redis.Redis(
     db=1,
     decode_responses=True
 )
+
+
 TEST = "stocks"
 FILEPATH = os.getenv("FILEPATH")
+SIMULATION_DATE = "2025-05-27"
+
 CONFIG_DIR = os.path.dirname(os.path.abspath(__file__))
 STOCKS = list(json.load(open(os.path.join(CONFIG_DIR, "stocks.json")))[TEST].keys())
 
 DECTECTION_TYPE = 'buy'
-
+GRAPH = 'NSE:TATAELXSI'
 VOLUME = True
 
 if __name__ == "__main__":
+    Main.run()
     
-    print(STOCKS)
