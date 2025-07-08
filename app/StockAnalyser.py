@@ -28,8 +28,8 @@ class Cumulative_Support():
         if self.ltpDf.size<size:
             update = np.nan
         else:
-            update = self.ltpDf['buy-vol'][-size:].sum() - self.ltpDf['sell-vol'][-size:].sum()
-            #update = self.ltpDf[vol_type][-size:].sum()
+            #update = self.ltpDf['buy-vol'][-size:].sum() - self.ltpDf['sell-vol'][-size:].sum()
+            update = self.ltpDf[vol_type][-70:].sum()
         
 
         vol_df.loc[self.ltpDf.index[-1],0] = update
@@ -92,7 +92,7 @@ class Cumulative_Support():
         #print(f'ltpDf shape: {self.ltpDf.shape} ltpDf columns: {self.ltpDf.columns} ltpDf index: {self.ltpDf.index}')
         self.update_volDiff(50,self.voldiff_50,'buy-vol')
         self.update_volDiff(20,self.voldiff_20,'sell-vol')
-        #self.update_volDiff(300,self.voldiff_300)
+        #self.update_volDiff(300,self.voldiff_300,'buy-vol')
     
     def signal(self,):
         """

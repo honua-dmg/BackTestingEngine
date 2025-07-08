@@ -2,7 +2,7 @@ import redis
 import os
 import dotenv
 import json
-import Main
+import boto3
 ENVLOC = '/app/.env'
 dotenv.load_dotenv(ENVLOC)
 # Centralized Redis connection
@@ -20,19 +20,25 @@ r_alg = redis.Redis(
     db=1,
     decode_responses=True
 )
-
+s3 = boto3.client(
+    's3',
+    region_name=os.getenv('DIGITALOCEAN_REGION'),
+    endpoint_url=os.getenv('DIGITALOCEAN_ENDPOINT'),
+    aws_access_key_id=os.getenv('DIGITALOCEAN_KEY_ID'),
+    aws_secret_access_key=os.getenv('DIGITALOCEAN_KEY_SECRET')
+)
 
 TEST = "stocks"
 FILEPATH = os.getenv("FILEPATH")
-SIMULATION_DATE = "2025-05-27"
+SIMULATION_DATE = "2025-07-03"
 
 CONFIG_DIR = os.path.dirname(os.path.abspath(__file__))
 STOCKS = list(json.load(open(os.path.join(CONFIG_DIR, "stocks.json")))[TEST].keys())
 
+EXCHANGE = json.load(open(os.path.join(CONFIG_DIR, "stocks.json")))[TEST][STOCKS[0]][0]
 DECTECTION_TYPE = 'buy'
-GRAPH = 'NSE:TATAELXSI'
+GRAPH = f"{EXCHANGE}:{STOCKS[0]}"
 VOLUME = True
 
-if __name__ == "__main__":
-    Main.run()
+
     

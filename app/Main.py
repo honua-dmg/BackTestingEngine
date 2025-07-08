@@ -7,7 +7,7 @@ import time
 import dotenv
 import os
 import logging
-from config import r,STOCKS,FILEPATH,SIMULATION_DATE
+from config import r,STOCKS,FILEPATH,SIMULATION_DATE,s3,EXCHANGE
 import simulator
 from pymemcache.client.base import Client
 memcached_client = Client((os.getenv('MEMCACHE_HOST','memcache'), int(os.getenv("MEMCACHE_PORT",11211))), encoding='utf-8')
@@ -16,7 +16,13 @@ PATH = FILEPATH
 tail -f /root/stonks/cron.log - to view live - you can also run docker logs -f stonks_app_1
 """
 
-
+def download_file():
+    if not os.path.exists(f'{FILEPATH}/{EXCHANGE}/{STOCKS[0]}/{SIMULATION_DATE}.csv'):
+        try:
+            s3.download_file(Bucket='kite', Key=f'{EXCHANGE}/{STOCKS[0]}/{SIMULATION_DATE}.csv', Filename=f'{FILEPATH}/{EXCHANGE}/{STOCKS[0]}/{SIMULATION_DATE}.csv')
+            print(f"[MAIN] Downloaded {EXCHANGE}:{STOCKS[0]} for {SIMULATION_DATE}")
+        except Exception as e:
+            raise Exception("file not found,choose another date.")
 
 def begin():
     """
@@ -50,7 +56,9 @@ def run():
     
     logging.info("Starting main program")
     logging.info("Calling begin()")
+    download_file()
     try:
+        
         begin()
     except KeyboardInterrupt:
         logging.info(" Keyboard Interrupt received. Exiting.")

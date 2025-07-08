@@ -409,6 +409,7 @@ def graph(instance):
     for p in [plot_buy, plot_sell, plot_diff]:
         p.getAxis("left").setPen(pg.mkPen("black"))
         p.getAxis("bottom").setPen(pg.mkPen("black"))
+        p.showGrid(x=True, y=True)
 
     # Timer to update column count every second
     timer = pg.QtCore.QTimer()
