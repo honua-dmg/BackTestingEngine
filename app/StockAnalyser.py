@@ -29,7 +29,7 @@ class Cumulative_Support():
             update = np.nan
         else:
             #update = self.ltpDf['buy-vol'][-size:].sum() - self.ltpDf['sell-vol'][-size:].sum()
-            update = self.ltpDf[vol_type][-70:].sum()
+            update = self.ltpDf[vol_type].ewm(span=70).mean().iloc[-1]
         
 
         vol_df.loc[self.ltpDf.index[-1],0] = update
