@@ -3,16 +3,18 @@ import numpy as np
 from cleanData import Algo1
 import pyqtgraph as pg
 class Cumulative_Support():
-    def __init__(self,detection_type='buy',vol=True):
+    def __init__(self,vol=True):
         self.aggDf = pd.DataFrame(columns=['buy-vol', 'sell-vol'])
         self.aggDf.index.name = 'ltp' # Name the index for clarity
         self.ltpDf = pd.DataFrame(columns=['time', 'ltp', 'buy-vol', 'sell-vol', 'type'])
 
-        self.vol = f'{detection_type}-vol'
+   
 
  
-        self.lowHighdf = [pd.DataFrame(),pd.DataFrame()]
-        self.highLowdf = [pd.DataFrame(),pd.DataFrame()]
+        #self.lowHighdf = [pd.DataFrame(),pd.DataFrame()]
+        #self.highLowdf = [pd.DataFrame(),pd.DataFrame()]
+        self.combineddf = [pd.DataFrame(),pd.DataFrame()]
+        
         self.lowHighMaxes = [pd.DataFrame(columns=['second','first']),pd.DataFrame(columns=['second','first'])]
         self.HighlowMaxes = [pd.DataFrame(columns=['second','first']),pd.DataFrame(columns=['second','first'])]
         self.volOrQty = vol
@@ -29,7 +31,7 @@ class Cumulative_Support():
             update = np.nan
         else:
             #update = self.ltpDf['buy-vol'][-size:].sum() - self.ltpDf['sell-vol'][-size:].sum()
-            update = self.ltpDf[vol_type].ewm(span=70).mean().iloc[-1]
+            update = self.ltpDf[vol_type].ewm(span=200).mean().iloc[-1]
         
 
         vol_df.loc[self.ltpDf.index[-1],0] = update
@@ -99,13 +101,34 @@ class Cumulative_Support():
         normalises and finds the cumulative means of the buy volumes.
         """
         types=['buy','sell']
+
         # if the 
         for index in range(2):
             if len(self.aggDf[self.aggDf[f'{types[index]}-vol']>0]) ==0:
-                pd.concat([self.lowHighMaxes[index],pd.DataFrame([[np.nan] * len(self.lowHighMaxes[index].columns)],columns=self.lowHighMaxes[index].columns)])
-                pd.concat([self.HighlowMaxes[index],pd.DataFrame([[np.nan] * len(self.lowHighMaxes[index].columns)],columns=self.HighlowMaxes[index].columns)])
-                self.lowHighdf[index] = pd.concat(axis=1,objs=[self.lowHighdf[index],pd.DataFrame([[np.nan]], index=[self.ltpDf.index[-1]])]).reindex(self.aggDf.index)
-                self.highLowdf[index] = pd.concat(axis=1,objs=[self.highLowdf[index],pd.DataFrame([[np.nan]], index=[self.ltpDf.index[-1]])]).reindex(self.aggDf.index)
+                pd.concat(
+                    [self.lowHighMaxes[index],
+                     pd.DataFrame([[np.nan] * len(self.lowHighMaxes[index].columns)],
+                                    columns=self.lowHighMaxes[index].columns)]
+                    )
+                pd.concat(
+                    [self.HighlowMaxes[index],
+                     pd.DataFrame([[np.nan] * len(self.lowHighMaxes[index].columns)],
+                                  columns=self.HighlowMaxes[index].columns)])
+                """               
+                self.lowHighdf[index] = pd.concat(axis=1,
+                                                  objs=[self.lowHighdf[index],
+                                                        pd.DataFrame([[np.nan]], 
+                                                                     index=[self.ltpDf.index[-1]])]
+                                                 ).reindex(self.aggDf.index)
+                self.highLowdf[index] = pd.concat(axis=1,
+                                                  objs=[self.highLowdf[index],
+                                                        pd.DataFrame([[np.nan]], index=[self.ltpDf.index[-1]])]
+                                                ).reindex(self.aggDf.index)
+                """
+                self.combineddf[index] = pd.concat(axis=1,
+                                                   objs=[self.combineddf[index],
+                                                         pd.DataFrame([[np.nan]], index=[self.ltpDf.index[-1]])]
+                                                ).reindex(self.aggDf.index)
                 return
 
             if self.volOrQty:
@@ -127,18 +150,26 @@ class Cumulative_Support():
             with open('test.txt','a') as f:
                 print(f"{highLow.to_dict()}",file=f)
             # we need to append lowHigh and Highlow to self.LowHighdf and self.HighLowdf
-            self.lowHighdf[index] = pd.concat(axis=1,objs=[self.lowHighdf[index],lowHigh.map(lambda x: 0 if x<0 else 1)]).reindex(self.aggDf.index)
-            self.highLowdf[index] = pd.concat(axis=1,objs=[self.highLowdf[index],highLow.map(lambda x: 0 if x<0 else 1)]).reindex(self.aggDf.index)
+            #self.lowHighdf[index] = pd.concat(axis=1,objs=[self.lowHighdf[index],lowHigh.map(lambda x: 0 if x<0 else 1)]).reindex(self.aggDf.index)
+            #self.highLowdf[index] = pd.concat(axis=1,objs=[self.highLowdf[index],highLow.map(lambda x: 0 if x<0 else 1)]).reindex(self.aggDf.index)
+            
+            combined = lowHigh.map(lambda x: 0 if x<0 else 1)+2*highLow.map(lambda x: 0 if x<0 else 1)
+            self.combineddf[index] =pd.concat(
+                        axis=1,
+                        objs=[self.combineddf[index],combined]
+                        ).reindex(self.aggDf.index)
             #print(f"lowHighdf shape: {self.lowHighdf.shape} highLowdf shape: {self.highLowdf.shape}")
 
-
-
     def parse(self,message):
+
         try:
             ltp,delta,ltp_type = self.cleaner.transform(message).values()
-        except (TypeError,AttributeError):
+        except (TypeError,AttributeError) as e:
+
+            #print('we got an error bitch')
             return
         #print(type(ltp),type(delta),type(ltp_type))
         self.update_df(message['timestamp'],ltp,delta,ltp_type)  
         self.signal()
+        #print(f'updated signal for {ltp} ')
 

@@ -30,7 +30,7 @@ s3 = boto3.client(
 
 TEST = "stocks"
 FILEPATH = os.getenv("FILEPATH")
-SIMULATION_DATE = "2025-07-11"
+SIMULATION_DATE = "2025-07-01"
 
 CONFIG_DIR = os.path.dirname(os.path.abspath(__file__))
 STOCKS = list(json.load(open(os.path.join(CONFIG_DIR, "stocks.json")))[TEST].keys())
