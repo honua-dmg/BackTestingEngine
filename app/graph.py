@@ -22,10 +22,9 @@ def graph(instance):
         return img"""
         
         lut = np.array([
-            [254,   79,   92,   170],  # 0: red (0,0)
-            [198, 158,   81,   170],  # 1: brown   (0,1)
-            [146, 194,   79,   170],  # 2: green (1,0)
-            [7,   235, 59,   170],  # 3: neon green  (1,1)
+            #   R,   G,   B,   A
+            [255,   0,   0, 170],  # 0: Red           (0,0)
+            [ 57, 255,  20, 170],  # 15: Neon Green   (3,3)
         ], dtype=np.ubyte)
 
         # Create the ImageItem
@@ -33,7 +32,6 @@ def graph(instance):
 
         # Assign the LUT
         img.setLookupTable(lut)
-
         # No need for setOpacity()—alpha comes from LUT
         plot.addItem(img)
         return img
@@ -75,20 +73,21 @@ def graph(instance):
         #instance.hmap_sell_LH.setImage(instance.lowHighdf[1].to_numpy().T, autoLevels=False)
         #instance.hmap_sell_HL.setImage(instance.highLowdf[1].to_numpy().T, autoLevels=False)
         instance.hmap_buy.setImage(instance.combineddf[0].to_numpy().T, autoLevels=False)
-        instance.hmap_sell.setImage(instance.combineddf[1].to_numpy().T, autoLevels=False)
+        #instance.hmap_sell.setImage(instance.combineddf[1].to_numpy().T, autoLevels=False)
 
         min_ltp = instance.ltpDf['ltp'].min()
         n = len(instance.ltpDf)
         m = len(instance.aggDf)
-        for h in [instance.hmap_buy,instance.hmap_sell]:
+        #for h in [instance.hmap_buy,instance.hmap_sell]:
+        
         #for h in [instance.hmap_buy_HL,instance.hmap_buy_LH,instance.hmap_sell_HL,instance.hmap_sell_LH]:
-            h.setRect(0, min_ltp, n, m)
+        instance.hmap_buy.setRect(0, min_ltp, n, m)
 
         # update line plots:
         x = instance.ltpDf.index.to_numpy()
         y_ltp = instance.ltpDf['ltp'].to_numpy()
         instance.line_ltp_buy.setData(x, y_ltp)
-        instance.line_ltp_sell.setData(x, y_ltp)
+        #instance.line_ltp_sell.setData(x, y_ltp)
         #update buy trend lines
         x, y = getXY(instance.lowHighMaxes[0])
         instance.line_upper_1_buy.setData(x, y)
@@ -133,12 +132,12 @@ def graph(instance):
     plot_buy = win_buy.addPlot(title="Buy Side")
     plot_buy.addLegend()
     win_buy.show()
-
+    """
     win_sell = pg.GraphicsLayoutWidget(title="Sell Heatmap & Trends")
     win_sell.setBackground("white")
     plot_sell = win_sell.addPlot(title="Sell Side")
     plot_sell.addLegend()
-    win_sell.show()
+    win_sell.show()"""
 
     win_diff = pg.GraphicsLayoutWidget(title="Volume Difference")
     win_diff.setBackground("white")
@@ -150,7 +149,7 @@ def graph(instance):
     # add heatmaps:
     #instance.hmap_buy_LH = addHeatMap(plot_buy, instance.lowHighdf[0].to_numpy().T)
     #instance.hmap_buy_HL = addHeatMap(plot_buy, instance.highLowdf[0].to_numpy().T)
-    instance.hmap_buy = addHeatMap(plot_buy, instance.combineddf[0].to_numpy().T)
+    instance.hmap_buy = addHeatMap(plot_buy, instance.total.to_numpy().T)
 
     instance.line_upper_1_buy = addlinePlot(plot_buy, linewidth=4, data=instance.lowHighMaxes[0], name='Buy Uptrend', color='#097969')
     instance.line_lower_1_buy = addlinePlot(plot_buy, linewidth=4, data=instance.HighlowMaxes[0], name='Buy Downtrend', color='#fbd604')
@@ -158,19 +157,19 @@ def graph(instance):
     #sell heatmaps:
     #instance.hmap_sell_LH = addHeatMap(plot_sell, instance.lowHighdf[1].to_numpy().T)
     #instance.hmap_sell_HL = addHeatMap(plot_sell, instance.highLowdf[1].to_numpy().T)
-    instance.hmap_sell = addHeatMap(plot_sell, instance.combineddf[1].to_numpy().T)
+    #instance.hmap_sell = addHeatMap(plot_sell, instance.combineddf[1].to_numpy().T)
 
-    instance.line_upper_1_sell = addlinePlot(plot_sell, linewidth=4, data=instance.lowHighMaxes[1], name='Sell Uptrend', color='#5F9EA0')
-    instance.line_lower_1_sell = addlinePlot(plot_sell, linewidth=4, data=instance.HighlowMaxes[1], name='Sell Downtrend', color='#fdd750')
+    instance.line_upper_1_sell = addlinePlot(plot_buy, linewidth=4, data=instance.lowHighMaxes[1], name='Sell Uptrend', color="#184546")
+    instance.line_lower_1_sell = addlinePlot(plot_buy, linewidth=4, data=instance.HighlowMaxes[1], name='Sell Downtrend', color='#fdd750')
 
     #voll_diff:
-    instance.vol_diff_50 = addlinePlot(plot_diff, linewidth=4, data=instance.voldiff_50, name='VolDiff_50', color='#fdd750')
+    instance.vol_diff_50 = addlinePlot(plot_diff, linewidth=4, data=instance.voldiff_50, name='VolDiff_50', color="#a99344")
     instance.vol_diff_20 = addlinePlot(plot_diff, linewidth=4, data=instance.voldiff_20, name='VolDiff_20', color='#097969')
     #instance.vol_diff_300 = addlinePlot(plot_diff, linewidth=4, data=instance.voldiff_300, name='VolDiff_300', color=(0, 0, 255))
 
     # line plots
     instance.line_ltp_buy = addlinePlot(plot_buy, linewidth=2, data=instance.ltpDf['ltp'], name='LTP', color=(0, 0, 255))
-    instance.line_ltp_sell = addlinePlot(plot_sell, linewidth=2, data=instance.ltpDf['ltp'], name='LTP', color=(0, 0, 255))
+    #instance.line_ltp_sell = addlinePlot(plot_sell, linewidth=2, data=instance.ltpDf['ltp'], name='LTP', color=(0, 0, 255))
 
     #vols:
     instance.buy_vol = addlinePlot(plot_diff,linewidth=1,data=instance.ltpDf['buy-vol'],name='buyVol',color="#a0924a")
@@ -178,7 +177,8 @@ def graph(instance):
 
 
     # Adjust axis colors for visibility
-    for p in [plot_buy, plot_sell, plot_diff]:
+    #for p in [plot_buy, plot_sell, plot_diff]:
+    for p in [plot_buy, plot_diff]:
         p.getAxis("left").setPen(pg.mkPen("black"))
         p.getAxis("bottom").setPen(pg.mkPen("black"))
         p.showGrid(x=True, y=True)

@@ -13,8 +13,8 @@ class Cumulative_Support():
  
         #self.lowHighdf = [pd.DataFrame(),pd.DataFrame()]
         #self.highLowdf = [pd.DataFrame(),pd.DataFrame()]
-        self.combineddf = [pd.DataFrame(),pd.DataFrame()]
-        
+        self.combineddf = [pd.DataFrame(dtype='Int64'),pd.DataFrame(dtype='Int64')]
+        self.total = pd.DataFrame(dtype='Int64')
         self.lowHighMaxes = [pd.DataFrame(columns=['second','first']),pd.DataFrame(columns=['second','first'])]
         self.HighlowMaxes = [pd.DataFrame(columns=['second','first']),pd.DataFrame(columns=['second','first'])]
         self.volOrQty = vol
@@ -101,6 +101,7 @@ class Cumulative_Support():
         normalises and finds the cumulative means of the buy volumes.
         """
         types=['buy','sell']
+        combine=[]
 
         # if the 
         for index in range(2):
@@ -127,9 +128,9 @@ class Cumulative_Support():
                 """
                 self.combineddf[index] = pd.concat(axis=1,
                                                    objs=[self.combineddf[index],
-                                                         pd.DataFrame([[np.nan]], index=[self.ltpDf.index[-1]])]
+                                                         pd.DataFrame([[np.nan]], index=[self.ltpDf.index[-1]],columns=['vol'])]
                                                 ).reindex(self.aggDf.index)
-                return
+                continue
 
             if self.volOrQty:
                 self.aggby = 1
@@ -140,8 +141,8 @@ class Cumulative_Support():
             lowerbound = self.aggDf[self.aggDf[f'{types[index]}-vol'] != 0].index[0]
             upperbound = self.aggDf[self.aggDf[f'{types[index]}-vol'] != 0].index[-1]
             # find the fractional deviation from the average for each ltp and cumsum that shit
-            lowHigh = pd.DataFrame(((self.aggDf[f'{types[index]}-vol'].mul(self.aggby))/avg - 1).loc[lowerbound:upperbound].expanding().sum(),index =range(lowerbound,upperbound+1)).reindex(self.aggDf.index).astype(float)
-            highLow = pd.DataFrame(((self.aggDf[f'{types[index]}-vol'].mul(self.aggby))/avg - 1).loc[lowerbound:upperbound].iloc[::-1].expanding().sum().iloc[::-1],index =range(lowerbound,upperbound+1)).reindex(self.aggDf.index).astype(float)
+            lowHigh = pd.DataFrame(((self.aggDf[f'{types[index]}-vol'].mul(self.aggby))/avg - 1).loc[lowerbound:upperbound].expanding().sum(),index =range(lowerbound,upperbound+1),columns=['vol']).reindex(self.aggDf.index).astype(float)
+            highLow = pd.DataFrame(((self.aggDf[f'{types[index]}-vol'].mul(self.aggby))/avg - 1).loc[lowerbound:upperbound].iloc[::-1].expanding().sum().iloc[::-1],index =range(lowerbound,upperbound+1),columns=['vol']).reindex(self.aggDf.index).astype(float)
             #print(f"{lowHigh[lowHigh.columns[0]].nlargest(2).index.to_list()} {highLow[highLow.columns[0]].nlargest(2).index.to_list()}")
             # we need to append the top 2 of each. 
             self.lowHighMaxes[index].loc[self.ltpDf.index[-1],['second','first']] = lowHigh[lowHigh.columns[0]].nlargest(2).index.to_list() # idk if the to_list part is necessary
@@ -154,14 +155,24 @@ class Cumulative_Support():
             #self.highLowdf[index] = pd.concat(axis=1,objs=[self.highLowdf[index],highLow.map(lambda x: 0 if x<0 else 1)]).reindex(self.aggDf.index)
             
             combined = lowHigh.map(lambda x: 0 if x<0 else 1)+2*highLow.map(lambda x: 0 if x<0 else 1)
+            combine.append(combined)
             self.combineddf[index] =pd.concat(
                         axis=1,
                         objs=[self.combineddf[index],combined]
                         ).reindex(self.aggDf.index)
             #print(f"lowHighdf shape: {self.lowHighdf.shape} highLowdf shape: {self.highLowdf.shape}")
-
+        if len(self.aggDf) <2:
+            self.total= pd.concat(axis=1,
+                                    objs=[self.total,
+                                            pd.DataFrame([[np.nan]], index=[self.ltpDf.index[-1]],columns=['vol'])]
+                                    ).reindex(self.aggDf.index)
+        elif len(combine)==2:
+            total_combined = combine[0]+2*combine[1]
+            self.total =pd.concat(
+                            axis=1,
+                            objs=[self.total,total_combined]
+                            ).reindex(self.aggDf.index)
     def parse(self,message):
-
         try:
             ltp,delta,ltp_type = self.cleaner.transform(message).values()
         except (TypeError,AttributeError) as e:
