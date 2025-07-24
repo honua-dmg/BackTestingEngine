@@ -14,6 +14,7 @@ class Cumulative_Support():
         #self.lowHighdf = [pd.DataFrame(),pd.DataFrame()]
         #self.highLowdf = [pd.DataFrame(),pd.DataFrame()]
         self.combineddf = [pd.DataFrame(),pd.DataFrame()]
+        self.total = pd.DataFrame()
         
         self.lowHighMaxes = [pd.DataFrame(columns=['second','first']),pd.DataFrame(columns=['second','first'])]
         self.HighlowMaxes = [pd.DataFrame(columns=['second','first']),pd.DataFrame(columns=['second','first'])]
@@ -113,7 +114,7 @@ class Cumulative_Support():
         normalises and finds the cumulative means of the buy volumes.
         """
         types=['buy','sell']
-
+        combineBuySell = []
         # if the 
         for index in range(2):
             if len(self.aggDf[self.aggDf[f'{types[index]}-vol']>0]) ==0:
@@ -141,7 +142,8 @@ class Cumulative_Support():
                                                    objs=[self.combineddf[index],
                                                          pd.DataFrame([[np.nan]], index=[self.ltpDf.index[-1]])]
                                                 ).reindex(self.aggDf.index)
-                return
+
+                continue
 
             if self.volOrQty:
                 self.aggby = 1
@@ -164,12 +166,24 @@ class Cumulative_Support():
             #self.highLowdf[index] = pd.concat(axis=1,objs=[self.highLowdf[index],highLow.map(lambda x: 0 if x<0 else 1)]).reindex(self.aggDf.index)
             
             combined = lowHigh.map(lambda x: 0 if x<0 else 1)+2*highLow.map(lambda x: 0 if x<0 else 1)
+            combineBuySell.append(combined)
             self.combineddf[index] =pd.concat(
                         axis=1,
                         objs=[self.combineddf[index],combined]
                         ).reindex(self.aggDf.index)
             #print(f"lowHighdf shape: {self.lowHighdf.shape} highLowdf shape: {self.highLowdf.shape}")
         
+        if len(self.aggDf) <2:
+            self.total= pd.concat(axis=1,
+                                    objs=[self.total,
+                                            pd.DataFrame([[np.nan]], index=[self.ltpDf.index[-1]],columns=['vol'])]
+                                    ).reindex(self.aggDf.index)
+        elif len(combineBuySell)==2:
+            total_combined = combineBuySell[0]+2*combineBuySell[1]
+            self.total =pd.concat(
+                            axis=1,
+                            objs=[self.total,total_combined]
+                            ).reindex(self.aggDf.index)
 
     def find_peaksBuy(self):
         # Base case: not enough data
