@@ -3,12 +3,13 @@ import os
 import time
 import datetime as dt
 import json
-from config import r,STOCKS,CONFIG_DIR,TEST
+from config import r,STOCKS,CONFIG_DIR,TEST,FILEPATH,EXCHANGE,s3
 import multiprocessing
 import logging
 
 
-FILEPATH = os.getenv("FILEPATH")
+
+
 
 def tokenStockMapping(exchange):
     """
@@ -27,6 +28,7 @@ def get_all_tick_data(date_str):
     """
     Reads all CSV files for a given date, combines them, and sorts by timestamp.
     """
+
     stocks  = json.load(open(os.path.join(CONFIG_DIR, "stocks.json")))[TEST]
     nse = tokenStockMapping('NSE')
     bse = tokenStockMapping('BSE')
