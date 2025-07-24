@@ -63,6 +63,7 @@ def run():
     except KeyboardInterrupt:
         logging.info(" Keyboard Interrupt received. Exiting.")
         r.set('end', 'true')
+        
         time.sleep(2)
         logging.info(" Flushing redis")
         r.flushall()
