@@ -159,8 +159,6 @@ class Cumulative_Support():
             self.lowHighMaxes[index].loc[self.ltpDf.index[-1],['second','first']] = lowHigh[lowHigh.columns[0]].nlargest(2).index.to_list() # idk if the to_list part is necessary
             self.HighlowMaxes[index].loc[self.ltpDf.index[-1],['second','first']] = highLow[highLow.columns[0]].nlargest(2).index.to_list()
 
-            with open('test.txt','a') as f:
-                print(f"{highLow.to_dict()}",file=f)
             # we need to append lowHigh and Highlow to self.LowHighdf and self.HighLowdf
             #self.lowHighdf[index] = pd.concat(axis=1,objs=[self.lowHighdf[index],lowHigh.map(lambda x: 0 if x<0 else 1)]).reindex(self.aggDf.index)
             #self.highLowdf[index] = pd.concat(axis=1,objs=[self.highLowdf[index],highLow.map(lambda x: 0 if x<0 else 1)]).reindex(self.aggDf.index)
@@ -171,7 +169,7 @@ class Cumulative_Support():
                         objs=[self.combineddf[index],combined]
                         ).reindex(self.aggDf.index)
             #print(f"lowHighdf shape: {self.lowHighdf.shape} highLowdf shape: {self.highLowdf.shape}")
-
+        
 
     def find_peaksBuy(self):
         # Base case: not enough data
