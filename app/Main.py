@@ -22,7 +22,7 @@ def download_file():
             s3.download_file(Bucket='kite', Key=f'{EXCHANGE}/{STOCKS[0]}/{SIMULATION_DATE}.csv', Filename=f'{FILEPATH}/{EXCHANGE}/{STOCKS[0]}/{SIMULATION_DATE}.csv')
             print(f"[MAIN] Downloaded {EXCHANGE}:{STOCKS[0]} for {SIMULATION_DATE}")
         except Exception as e:
-            raise Exception("file not found,choose another date.")
+            raise Exception(f"file not found,choose another date.\n {e}")
 
 def begin():
     """

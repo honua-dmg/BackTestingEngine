@@ -3,7 +3,7 @@ import os
 import dotenv
 import json
 import boto3
-ENVLOC = '/app/.env'
+ENVLOC = '.env'
 dotenv.load_dotenv(ENVLOC)
 # Centralized Redis connection
 # Use a single connection pool that is shared across the application.
@@ -30,7 +30,7 @@ s3 = boto3.client(
 
 TEST = "stocks"
 FILEPATH = os.getenv("FILEPATH")
-SIMULATION_DATE = "2025-07-01"
+SIMULATION_DATE = "2025-07-03"
 
 CONFIG_DIR = os.path.dirname(os.path.abspath(__file__))
 STOCKS = list(json.load(open(os.path.join(CONFIG_DIR, "stocks.json")))[TEST].keys())
@@ -40,5 +40,7 @@ DECTECTION_TYPE = 'buy'
 GRAPH = f"{EXCHANGE}:{STOCKS[0]}"
 VOLUME = True
 
-
+if __name__ == "__main__":
+    print("[CONFIG] Loading config")
+    print(os.getenv('DIGITALOCEAN_ENDPOINT'))
     
