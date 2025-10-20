@@ -2,15 +2,15 @@ import pandas as pd
 import numpy as np
 from cleanData import Algo1
 import pyqtgraph as pg
+
+def sigmoid(x):
+    return 1 / (1 + np.exp(-x))
+
 class Cumulative_Support():
     def __init__(self,vol=True):
         self.aggDf = pd.DataFrame(columns=['buy-vol', 'sell-vol'])
         self.aggDf.index.name = 'ltp' # Name the index for clarity
         self.ltpDf = pd.DataFrame(columns=['time', 'ltp', 'buy-vol', 'sell-vol', 'type'])
-
-   
-
- 
         #self.lowHighdf = [pd.DataFrame(),pd.DataFrame()]
         #self.highLowdf = [pd.DataFrame(),pd.DataFrame()]
         self.combineddf = [pd.DataFrame(),pd.DataFrame()]
@@ -42,11 +42,12 @@ class Cumulative_Support():
             update = np.nan
         else:
             #update = self.ltpDf['buy-vol'][-size:].sum() - self.ltpDf['sell-vol'][-size:].sum()
-            update = self.ltpDf[vol_type].ewm(span=200).mean().iloc[-1]
+            update = self.ltpDf[vol_type].ewm(span=50).mean().iloc[-1]
         
 
         vol_df.loc[self.ltpDf.index[-1],0] = update
         
+    
 
     def update_df(self,last_traded_time,ltp:int,delta:int,type:str):
         """ 
@@ -106,10 +107,8 @@ class Cumulative_Support():
         self.update_volDiff(50,self.voldiff_buy,'buy-vol')
         self.update_volDiff(20,self.voldiff_sell,'sell-vol')
         #self.update_volDiff(300,self.voldiff_300,'buy-vol')
-        self.find_peaksBuy()
-        self.find_peaksSell()
     
-    def signal(self,):
+    def signal(self):
         """
         normalises and finds the cumulative means of the buy volumes.
         """
@@ -165,7 +164,8 @@ class Cumulative_Support():
             #self.lowHighdf[index] = pd.concat(axis=1,objs=[self.lowHighdf[index],lowHigh.map(lambda x: 0 if x<0 else 1)]).reindex(self.aggDf.index)
             #self.highLowdf[index] = pd.concat(axis=1,objs=[self.highLowdf[index],highLow.map(lambda x: 0 if x<0 else 1)]).reindex(self.aggDf.index)
             
-            combined = lowHigh.map(lambda x: 0 if x<0 else 1)+2*highLow.map(lambda x: 0 if x<0 else 1)
+            #combined = lowHigh.map(lambda x: 0 if x<0 else 1)+2*highLow.map(lambda x: 0 if x<0 else 1)
+            combined = lowHigh.apply(sigmoid)+2*highLow.apply(sigmoid)
             combineBuySell.append(combined)
             self.combineddf[index] =pd.concat(
                         axis=1,
@@ -248,13 +248,13 @@ class Cumulative_Support():
     def parse(self,message):
 
         try:
-            ltp,delta,ltp_type = self.cleaner.transform(message).values()
+            self.ltp,self.delta,self.ltp_type = self.cleaner.transform(message).values()
         except (TypeError,AttributeError) as e:
 
             #print('we got an error bitch')
             return
         #print(type(ltp),type(delta),type(ltp_type))
-        self.update_df(message['timestamp'],ltp,delta,ltp_type)  
+        self.update_df(message['timestamp'],self.ltp,self.delta,self.ltp_type)  
         self.signal()
         #print(f'updated signal for {ltp} ')
         
