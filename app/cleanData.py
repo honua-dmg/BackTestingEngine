@@ -39,9 +39,13 @@ class Algo1(CleanData):
         #figure out the type:
         buy_prices = np.array([np.float32(message[f'buy_price_{i}']) for i in range(1,6)])
         sell_prices = np.array([np.float32(message[f'sell_price_{i}']) for i in range(1,6)])
+
         ltp = np.float32(message['last_price'])
         ltp_type = 'b' if np.dot(buy_prices-ltp,(buy_prices-ltp).T) < np.dot(sell_prices-ltp,(sell_prices-ltp).T) else 's'
+        spread = max(buy_prices)-min(sell_prices)
         return {'ltp':ltp, 
                 'delta':delta_vol, 
-                'ltp_type':ltp_type}
+                'ltp_type':ltp_type,
+                "spread":spread}
     
+

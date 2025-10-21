@@ -4,17 +4,19 @@ from cleanData import Algo1
 import pyqtgraph as pg
 
 def sigmoid(x):
-    return 1 / (1 + np.exp(-x))
+    return 1 / (1 + np.exp(-x/2))
 
 class Cumulative_Support():
     def __init__(self,vol=True):
         self.aggDf = pd.DataFrame(columns=['buy-vol', 'sell-vol'])
         self.aggDf.index.name = 'ltp' # Name the index for clarity
-        self.ltpDf = pd.DataFrame(columns=['time', 'ltp', 'buy-vol', 'sell-vol', 'type'])
-        #self.lowHighdf = [pd.DataFrame(),pd.DataFrame()]
-        #self.highLowdf = [pd.DataFrame(),pd.DataFrame()]
+        self.ltpDf = pd.DataFrame(columns=['time', 'ltp', 'buy-vol', 'sell-vol', 'type','spread'])
+        self.lowHighdf = [pd.DataFrame(),pd.DataFrame()]
+        self.highLowdf = [pd.DataFrame(),pd.DataFrame()]
         self.combineddf = [pd.DataFrame(),pd.DataFrame()]
         self.total = pd.DataFrame()
+
+        
         
         self.lowHighMaxes = [pd.DataFrame(columns=['second','first']),pd.DataFrame(columns=['second','first'])]
         self.HighlowMaxes = [pd.DataFrame(columns=['second','first']),pd.DataFrame(columns=['second','first'])]
@@ -49,7 +51,7 @@ class Cumulative_Support():
         
     
 
-    def update_df(self,last_traded_time,ltp:int,delta:int,type:str):
+    def update_df(self,last_traded_time,ltp:int,delta:int,type:str,spread:int):
         """ 
         updates the aggregrated dataframe and the ltp dataframe. 
 
@@ -92,12 +94,14 @@ class Cumulative_Support():
                         'ltp'       :[ltp],
                         'buy-vol'   :[0],
                         'sell-vol'  :[delta],
+                        'spread'    :[spread]
                         #'diff'      : diff
             } if type=='s' else  {
                         'time'      :[last_traded_time],
                         'ltp'       :[ltp],
                         'buy-vol'   :[delta],
                         'sell-vol'  :[0],
+                        'spread'    :[spread]
                         #'diff'      : diff
             }
         #print(f'data added: {new_record} type ltp: {self.ltpDf["ltp"].dtype}')
@@ -164,7 +168,10 @@ class Cumulative_Support():
             #self.lowHighdf[index] = pd.concat(axis=1,objs=[self.lowHighdf[index],lowHigh.map(lambda x: 0 if x<0 else 1)]).reindex(self.aggDf.index)
             #self.highLowdf[index] = pd.concat(axis=1,objs=[self.highLowdf[index],highLow.map(lambda x: 0 if x<0 else 1)]).reindex(self.aggDf.index)
             
+            self.lowHighdf[index] = pd.concat(axis=1,objs=[self.lowHighdf[index],lowHigh.apply(sigmoid)]).reindex(self.aggDf.index)
+            self.highLowdf[index] = pd.concat(axis=1,objs=[self.highLowdf[index],highLow.apply(sigmoid)]).reindex(self.aggDf.index)
             #combined = lowHigh.map(lambda x: 0 if x<0 else 1)+2*highLow.map(lambda x: 0 if x<0 else 1)
+        """
             combined = lowHigh.apply(sigmoid)+2*highLow.apply(sigmoid)
             combineBuySell.append(combined)
             self.combineddf[index] =pd.concat(
@@ -184,7 +191,7 @@ class Cumulative_Support():
                             axis=1,
                             objs=[self.total,total_combined]
                             ).reindex(self.aggDf.index)
-
+        """
     def find_peaksBuy(self):
         # Base case: not enough data
         if len(self.voldiff_buy) < 2:
@@ -248,13 +255,12 @@ class Cumulative_Support():
     def parse(self,message):
 
         try:
-            self.ltp,self.delta,self.ltp_type = self.cleaner.transform(message).values()
+            self.ltp,self.delta,self.ltp_type,self.spread = self.cleaner.transform(message).values()
         except (TypeError,AttributeError) as e:
-
-            #print('we got an error bitch')
+            #print(f'we got an error bitch:{e}')
             return
         #print(type(ltp),type(delta),type(ltp_type))
-        self.update_df(message['timestamp'],self.ltp,self.delta,self.ltp_type)  
+        self.update_df(message['timestamp'],self.ltp,self.delta,self.ltp_type,self.spread)  
         self.signal()
         #print(f'updated signal for {ltp} ')
         
