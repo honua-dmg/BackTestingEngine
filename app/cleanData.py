@@ -46,6 +46,6 @@ class Algo1(CleanData):
         return {'ltp':ltp, 
                 'delta':delta_vol, 
                 'ltp_type':ltp_type,
-                "spread":spread}
+                "spread":spread,}
     
 
