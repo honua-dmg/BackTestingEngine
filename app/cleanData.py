@@ -46,6 +46,8 @@ class Algo1(CleanData):
         return {'ltp':ltp, 
                 'delta':delta_vol, 
                 'ltp_type':ltp_type,
-                "spread":spread,}
+                "spread":spread,
+                "bid":max(buy_prices),
+                "ask":min(sell_prices)}
     
 

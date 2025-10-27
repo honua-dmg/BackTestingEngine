@@ -4,13 +4,15 @@ from cleanData import Algo1
 import pyqtgraph as pg
 
 def sigmoid(x):
+    #return x
     return 1 / (1 + np.exp(-x/2))
 
 class Cumulative_Support():
     def __init__(self,vol=True):
+        
         self.aggDf = pd.DataFrame(columns=['buy-vol', 'sell-vol'])
         self.aggDf.index.name = 'ltp' # Name the index for clarity
-        self.ltpDf = pd.DataFrame(columns=['time', 'ltp', 'buy-vol', 'sell-vol', 'type','spread'])
+        self.ltpDf = pd.DataFrame(columns=['time', 'ltp', 'buy-vol', 'sell-vol', 'type','spread','bid','ask'])
         self.lowHighdf = [pd.DataFrame(),pd.DataFrame()]
         self.highLowdf = [pd.DataFrame(),pd.DataFrame()]
         self.combineddf = [pd.DataFrame(),pd.DataFrame()]
@@ -51,7 +53,7 @@ class Cumulative_Support():
         
     
 
-    def update_df(self,last_traded_time,ltp:int,delta:int,type:str,spread:int):
+    def update_df(self,last_traded_time,**kwargs):
         """ 
         updates the aggregrated dataframe and the ltp dataframe. 
 
@@ -64,7 +66,8 @@ class Cumulative_Support():
         returns:
             None
         """
-        ltp = int(ltp)
+
+        ltp = int(kwargs['ltp'])
         if self.aggDf.empty:
             min_ltp = ltp
             max_ltp = ltp
@@ -81,10 +84,10 @@ class Cumulative_Support():
         # Reindex the DataFrame to the desired range
         # fill_value=0 will initialize newly introduced rows with 0
         self.aggDf = self.aggDf.reindex(desired_index, fill_value=0)
-        if type == 's':
-            self.aggDf.loc[ltp, 'sell-vol'] += delta
+        if kwargs['ltp_type'] == 's':
+            self.aggDf.loc[ltp, 'sell-vol'] += kwargs['delta']
         else: # type == 'b'
-            self.aggDf.loc[ltp, 'buy-vol'] += delta
+            self.aggDf.loc[ltp, 'buy-vol'] += kwargs['delta']
 
 
         # update ltp data stream. 
@@ -93,15 +96,19 @@ class Cumulative_Support():
                         'time'      :[last_traded_time],
                         'ltp'       :[ltp],
                         'buy-vol'   :[0],
-                        'sell-vol'  :[delta],
-                        'spread'    :[spread]
+                        'sell-vol'  :[kwargs['delta']],
+                        'spread'    :[kwargs['spread']],
+                        'bid'       :[kwargs['bid']],
+                        'ask'       :[kwargs['ask']]
                         #'diff'      : diff
-            } if type=='s' else  {
+            } if kwargs['ltp_type']=='s' else  {
                         'time'      :[last_traded_time],
                         'ltp'       :[ltp],
-                        'buy-vol'   :[delta],
+                        'buy-vol'   :[kwargs['delta']],
                         'sell-vol'  :[0],
-                        'spread'    :[spread]
+                        'spread'    :[kwargs['spread']],
+                        'bid'       :[kwargs['bid']],
+                        'ask'       :[kwargs['ask']]
                         #'diff'      : diff
             }
         #print(f'data added: {new_record} type ltp: {self.ltpDf["ltp"].dtype}')
@@ -255,12 +262,17 @@ class Cumulative_Support():
     def parse(self,message):
 
         try:
-            self.ltp,self.delta,self.ltp_type,self.spread = self.cleaner.transform(message).values()
+            kwargs = self.cleaner.transform(message)
+            self.ltp= kwargs['ltp']
+            self.delta = kwargs['delta']
+            self.ltp_type = kwargs['ltp_type']
+            self.spread = kwargs['spread']
+
         except (TypeError,AttributeError) as e:
             #print(f'we got an error bitch:{e}')
             return
         #print(type(ltp),type(delta),type(ltp_type))
-        self.update_df(message['timestamp'],self.ltp,self.delta,self.ltp_type,self.spread)  
+        self.update_df(message['timestamp'],**kwargs)  
         self.signal()
         #print(f'updated signal for {ltp} ')
         
