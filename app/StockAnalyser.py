@@ -18,12 +18,10 @@ class Cumulative_Support():
         self.combineddf = [pd.DataFrame(),pd.DataFrame()]
         self.total = pd.DataFrame()
 
-        
-        
         self.lowHighMaxes = [pd.DataFrame(columns=['second','first']),pd.DataFrame(columns=['second','first'])]
         self.HighlowMaxes = [pd.DataFrame(columns=['second','first']),pd.DataFrame(columns=['second','first'])]
-        self.volOrQty = vol
 
+        self.volOrQty = vol
         self.voldiff_buy = pd.DataFrame()
         self.voldiff_sell = pd.DataFrame()
         self.voldiff_300 = pd.DataFrame()
@@ -175,11 +173,11 @@ class Cumulative_Support():
             #self.lowHighdf[index] = pd.concat(axis=1,objs=[self.lowHighdf[index],lowHigh.map(lambda x: 0 if x<0 else 1)]).reindex(self.aggDf.index)
             #self.highLowdf[index] = pd.concat(axis=1,objs=[self.highLowdf[index],highLow.map(lambda x: 0 if x<0 else 1)]).reindex(self.aggDf.index)
             
-            self.lowHighdf[index] = pd.concat(axis=1,objs=[self.lowHighdf[index],lowHigh.apply(sigmoid)]).reindex(self.aggDf.index)
-            self.highLowdf[index] = pd.concat(axis=1,objs=[self.highLowdf[index],highLow.apply(sigmoid)]).reindex(self.aggDf.index)
-            #combined = lowHigh.map(lambda x: 0 if x<0 else 1)+2*highLow.map(lambda x: 0 if x<0 else 1)
-        """
-            combined = lowHigh.apply(sigmoid)+2*highLow.apply(sigmoid)
+            #self.lowHighdf[index] = pd.concat(axis=1,objs=[self.lowHighdf[index],lowHigh.apply(sigmoid)]).reindex(self.aggDf.index)
+            #self.highLowdf[index] = pd.concat(axis=1,objs=[self.highLowdf[index],highLow.apply(sigmoid)]).reindex(self.aggDf.index)
+            combined = lowHigh.map(lambda x: 0 if x<0 else 1)+2*highLow.map(lambda x: 0 if x<0 else 1)
+        
+            #combined = lowHigh.apply(sigmoid)+2*highLow.apply(sigmoid)
             combineBuySell.append(combined)
             self.combineddf[index] =pd.concat(
                         axis=1,
@@ -198,7 +196,7 @@ class Cumulative_Support():
                             axis=1,
                             objs=[self.total,total_combined]
                             ).reindex(self.aggDf.index)
-        """
+        
     def find_peaksBuy(self):
         # Base case: not enough data
         if len(self.voldiff_buy) < 2:
