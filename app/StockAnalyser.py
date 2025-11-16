@@ -111,7 +111,9 @@ class Cumulative_Support():
             }
         #print(f'data added: {new_record} type ltp: {self.ltpDf["ltp"].dtype}')
 
-        self.ltpDf = pd.concat([self.ltpDf, pd.DataFrame(new_record)], ignore_index=True)
+        new_df = pd.DataFrame(new_record)
+        if not new_df.empty:
+            self.ltpDf = pd.concat([self.ltpDf, new_df], ignore_index=True)
         #print(f'ltpDf shape: {self.ltpDf.shape} ltpDf columns: {self.ltpDf.columns} ltpDf index: {self.ltpDf.index}')
         self.update_volDiff(50,self.voldiff_buy,'buy-vol')
         self.update_volDiff(20,self.voldiff_sell,'sell-vol')
@@ -197,66 +199,8 @@ class Cumulative_Support():
                             objs=[self.total,total_combined]
                             ).reindex(self.aggDf.index)
         
-    def find_peaksBuy(self):
-        # Base case: not enough data
-        if len(self.voldiff_buy) < 2:
-            return
 
-        # Get last 2 values safely
-        last = self.voldiff_buy.iloc[-1].values[0]
-        prev = self.voldiff_buy.iloc[-2].values[0]
 
-        if np.isnan(last) or np.isnan(prev):
-            return
-
-        diff = last - prev
-
-        # 1. End of peak: value dropped
-        if diff < 0 and self.ridingPeak_buy:
-            rise = last - self.buyPeak_start[1]
-            if rise >= self.Peaksizethreshold:
-                self.peaks_buy.append((len(self.voldiff_buy) - 1, last))
-            self.ridingPeak_buy = False
-            return
-
-        # 2. Start of a peak: sharp increase
-        if diff >= self.Peakstartthreshold and not self.ridingPeak_buy:
-            self.ridingPeak_buy = True
-            self.buyPeak_start = (len(self.voldiff_buy) - 2, prev)  # peak starts from prev
-            return
-
-        # 3. Continue riding the peak
-        # (do nothing; you’re still collecting until it drops)
-    def find_peaksSell(self):
-        # Base case: not enough data
-        if len(self.voldiff_sell) < 2:
-            return
-
-        # Get last two values safely
-        last = self.voldiff_sell.iloc[-1].values[0]
-        prev = self.voldiff_sell.iloc[-2].values[0]
-
-        if np.isnan(last) or np.isnan(prev):
-            return
-
-        diff = last - prev
-
-        # 1. End of peak: value dropped
-        if diff < 0 and self.ridingPeak_sell:
-            rise = last - self.sellPeak_start[1]
-            if rise >= self.Peaksizethreshold:
-                self.peaks_sell.append((len(self.voldiff_sell) - 1, last))
-            self.ridingPeak_sell = False
-            return
-
-        # 2. Start of a peak: sharp increase
-        if diff >= self.Peakstartthreshold and not self.ridingPeak_sell:
-            self.ridingPeak_sell = True
-            self.sellPeak_start = (len(self.voldiff_sell) - 2, prev)
-            return
-
-        # 3. Continue riding the peak (no action needed)
-    
     def parse(self,message):
 
         try:
