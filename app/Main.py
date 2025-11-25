@@ -17,12 +17,22 @@ tail -f /root/stonks/cron.log - to view live - you can also run docker logs -f s
 """
 
 def download_file():
-    if not os.path.exists(f'{FILEPATH}/{EXCHANGE}/{STOCKS[0]}/{SIMULATION_DATE}.csv'):
+    target_dir = f"{FILEPATH}/{EXCHANGE}/{STOCKS[0]}"
+    target_file = f"{target_dir}/{SIMULATION_DATE}.csv"
+    os.makedirs(target_dir, exist_ok=True)
+    if not os.path.exists(target_file):
         try:
-            s3.download_file(Bucket='kite', Key=f'{EXCHANGE}/{STOCKS[0]}/{SIMULATION_DATE}.csv', Filename=f'{FILEPATH}/{EXCHANGE}/{STOCKS[0]}/{SIMULATION_DATE}.csv')
+            s3.download_file(Bucket='kite', Key=f'{EXCHANGE}/{STOCKS[0]}/{SIMULATION_DATE}.csv', Filename=target_file)
+            
             print(f"[MAIN] Downloaded {EXCHANGE}:{STOCKS[0]} for {SIMULATION_DATE}")
         except Exception as e:
-            raise Exception("file not found,choose another date.")
+            print(f"{EXCHANGE}/{STOCKS[0]}/{SIMULATION_DATE}.csv")
+            print(target_file)
+            open(target_file, 'a').close()
+            print(f"[MAIN] Created empty file at {target_file} using os library")
+    else:
+        print('file exists')
+
 
 def begin():
     """
