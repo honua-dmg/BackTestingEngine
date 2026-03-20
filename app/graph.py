@@ -149,7 +149,10 @@ def graph(instance):
     # add heatmaps:
     #instance.hmap_buy_LH = addHeatMap(plot_buy, instance.lowHighdf[0].to_numpy().T)
     #instance.hmap_buy_HL = addHeatMap(plot_buy, instance.highLowdf[0].to_numpy().T)
-    instance.hmap_buy = addHeatMap(plot_buy, instance.total.to_numpy().T)
+    
+    # Initialize with dummy data if empty to avoid zero-size array error
+    buy_data = instance.total.to_numpy().T if instance.total.size > 0 else np.array([[0]])
+    instance.hmap_buy = addHeatMap(plot_buy, buy_data)
 
     instance.line_upper_1_buy = addlinePlot(plot_buy, linewidth=4, data=instance.lowHighMaxes[0], name='Buy Uptrend', color='#097969')
     instance.line_lower_1_buy = addlinePlot(plot_buy, linewidth=4, data=instance.HighlowMaxes[0], name='Buy Downtrend', color='#fbd604')

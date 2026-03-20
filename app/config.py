@@ -3,7 +3,9 @@ import os
 import dotenv
 import json
 import boto3
-ENVLOC = '/app/.env'
+
+# Try Docker path first, then local path
+ENVLOC = '/app/.env' if os.path.exists('/app/.env') else os.path.join(os.path.dirname(__file__), '../.env')
 dotenv.load_dotenv(ENVLOC)
 # Centralized Redis connection
 # Use a single connection pool that is shared across the application.
@@ -30,15 +32,20 @@ s3 = boto3.client(
 
 TEST = "stocks"
 FILEPATH = os.getenv("FILEPATH")
-SIMULATION_DATE = "2025-07-01"
+
 
 CONFIG_DIR = os.path.dirname(os.path.abspath(__file__))
 STOCKS = list(json.load(open(os.path.join(CONFIG_DIR, "stocks.json")))[TEST].keys())
 
-EXCHANGE = json.load(open(os.path.join(CONFIG_DIR, "stocks.json")))[TEST][STOCKS[0]][0]
+SIMULATION_DATE = json.load(open(os.path.join(CONFIG_DIR, "stocks.json")))['date']
+
+EXCHANGE = json.load(open(os.path.join(CONFIG_DIR, "stocks.json")))[TEST][STOCKS[0]][0] # one stock at a time.
+
 DECTECTION_TYPE = 'buy'
 GRAPH = f"{EXCHANGE}:{STOCKS[0]}"
 VOLUME = True
 
 
-    
+if __name__ == "__main__":
+    print(STOCKS)
+    print(EXCHANGE)
