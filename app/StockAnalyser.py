@@ -118,7 +118,7 @@ class Cumulative_Support():
                 self.aggby = self.aggDf.index
 
             avg = (self.aggDf[f'{types[index]}-vol'].mul(self.aggby)).sum()/len(self.aggDf[self.aggDf[f'{types[index]}-vol']>0]) # count only those who contributed.
-            lowerbound = self.aggDf[self.aggDf[f'{types[index]}-vol'] != 0].index[0]
+            lowerbound = self.aggDf[self.aggDf[f'{types[index]}-vol'] != 0].index[0] #why are we doing this??
             upperbound = self.aggDf[self.aggDf[f'{types[index]}-vol'] != 0].index[-1]
             # find the fractional deviation from the average for each ltp and cumsum that shit
             lowHigh = pd.DataFrame(((self.aggDf[f'{types[index]}-vol'].mul(self.aggby))/avg - 1).loc[lowerbound:upperbound].expanding().sum(),index =range(lowerbound,upperbound+1)).reindex(self.aggDf.index).astype(float)
