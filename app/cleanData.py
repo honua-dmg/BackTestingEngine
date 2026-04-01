@@ -41,7 +41,9 @@ class Algo1(CleanData):
         sell_prices = np.array([np.float32(message[f'sell_price_{i}']) for i in range(1,6)])
         ltp = np.float32(message['last_price'])
         ltp_type = 'b' if np.dot(buy_prices-ltp,(buy_prices-ltp).T) < np.dot(sell_prices-ltp,(sell_prices-ltp).T) else 's'
-        return {'ltp':ltp, 
+        #print(f"delta_vol: {delta_vol}, ltp: {ltp}, ltp_type: {ltp_type}")
+        return {'time': message['timestamp'],
+                'ltp':ltp, 
                 'delta':delta_vol, 
                 'ltp_type':ltp_type}
     

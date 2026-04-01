@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 from cleanData import Algo1
 import pyqtgraph as pg
+import datetime as dt
 class Cumulative_Support():
     def __init__(self,vol=True):
         self.aggDf = pd.DataFrame(columns=['buy-vol', 'sell-vol'])
@@ -156,4 +157,238 @@ class Cumulative_Support():
         #print(type(ltp),type(delta),type(ltp_type))
         self.update_df(message['timestamp'],ltp,delta,ltp_type)  
         self.signal()
+
+HEIGHT = 15000
+WIDTH = 400
+
+class Delta_analysis():
+    """
+    A new an improved version of the CNDM model. This class promises to be more memory and time efficient.
+
+    Overview of process:
+    1. parse incoming message using cleaner module
+    2. update ltpdf and aggdf 
+    3. update highlow and lowghigh with the new data. 
+    
+    """
+    def __init__(self):
+
+        self.cleaner = Algo1()
+        self.highLow = { 'buy':np.zeros((HEIGHT,WIDTH)),
+                    'sell':np.zeros((HEIGHT,WIDTH))}
+        
+        self.lowHigh = { 'buy':np.zeros((HEIGHT,WIDTH)),
+                    'sell':np.zeros((HEIGHT,WIDTH))}
+        
+        
+        self.aggdf_sell = np.zeros((WIDTH,1)) 
+        self.aggdf_buy = np.zeros((WIDTH,1)) 
+        self.ltpdf = np.zeros((HEIGHT,4)) #,ltp, buy-vol, sell-vol, type
+        self.ltpdf_cols = {
+            'time':0,
+            'ltp':1,
+            'buy-vol':2,
+            'sell-vol':3,
+            'type':4
+        }
+
+        self.curr_ltp_index = 0
+        self.indexes = { #dealing with aggdf, and related components
+            'curr_ltp_index': 200,  'curr_ltp':0,
+            'max_ltp_index': 400,   'max_ltp':0,
+            'min_ltp_index': 0,     'min_ltp':0
+        }
+
+
+
+    def _rebalance_df(self, arr: np.ndarray, curr_index: int, k: int = 50):
+        """
+        Rebalance an array by adding `k` rows on the side opposite the nearest boundary.
+
+        If curr_index is closer to the top (last row), append k empty rows at the end.
+        If curr_index is closer to the bottom (row 0), prepend k empty rows at the start.
+
+        Returns:
+            new_arr: rebalanced array with shape (old_rows + k, *arr.shape[1:])
+            new_index: updated index pointer in new_arr
+        """
+        if arr.ndim == 0:
+            raise ValueError("arr must have at least 1 dimension")
+        if k < 0:
+            raise ValueError("k must be >= 0")
+        if not (0 <= curr_index < arr.shape[0]):
+            raise IndexError("curr_index out of bounds")
+
+        old_rows = arr.shape[0]
+        new_shape = (old_rows + k, *arr.shape[1:])
+        new_arr = np.zeros(new_shape, dtype=arr.dtype)
+
+        dist_to_bottom = curr_index
+        dist_to_top = (old_rows - 1) - curr_index
+
+        # Closer to top boundary -> keep data at start, leave empty rows at end.
+        if dist_to_top <= dist_to_bottom:
+            new_arr[:old_rows, ...] = arr
+            new_index = curr_index
+        # Closer to bottom boundary -> shift data down, leave empty rows at start.
+        else:
+            new_arr[k:k + old_rows, ...] = arr
+            new_index = curr_index + k
+
+        return new_arr, new_index
+    
+    def rebalancedfs(self,df,type:str):
+        if type =='row':
+            return self._rebalance_df(df,self.indexes['curr_ltp_index'],k=50)
+        else:
+            df,new_index= self._rebalance_df(df.T,df.shape[1]-1,k=50)
+            return df.T,new_index
+        
+    def rebalance(self,):
+        """ Rebalance all dataframes and update indexes accordingly. """
+        print()
+        #self.ltpdf,self.curr_ltp_index = self.rebalancedfs(self.ltpdf,'row')
+        self.aggdf_buy,self.indexes['curr_ltp_index'] = self.rebalancedfs(self.aggdf_buy,'row')
+        self.aggdf_sell,self.indexes['curr_ltp_index'] = self.rebalancedfs(self.aggdf_sell,'row')
+        self.highLow['buy'],_ = self.rebalancedfs(self.highLow['buy'],'col')
+        self.highLow['sell'],_ = self.rebalancedfs(self.highLow['sell'],'col')
+        self.lowHigh['buy'],_ = self.rebalancedfs(self.lowHigh['buy'],'col')
+        self.lowHigh['sell'],_ = self.rebalancedfs(self.lowHigh['sell'],'col')
+
+    def update_ltp(self,time, ltp,delta,delta_type):
+        """Update ltp df
+        delt_type = 'b' or 's' for buy or sell respectively.
+        stored as 0, 1 in the ltp df for memory efficiency.
+        """
+        # we're not storing time right now cuz of how we're keeping track of data (numpy arrays)
+
+        
+        if delta_type == 'b':
+            self.ltpdf[self.curr_ltp_index]= [ltp,delta,0,0] # 0- BUY 1- SELL
+        elif delta_type == 's':
+            self.ltpdf[self.curr_ltp_index]= [ltp,0,delta,1]
+
+        #print('updated ltp_df')
+        self.curr_ltp_index+=1
+        if self.curr_ltp_index >= HEIGHT:
+            self.ltpdf,self.curr_ltp_index = self.rebalancedfs(self.ltpdf,'col')
+            self.highLow['buy'],_ = self.rebalancedfs(self.highLow['buy'],'col')
+            self.highLow['sell'],_ = self.rebalancedfs(self.highLow['sell'],'col')
+            self.lowHigh['buy'],_ = self.rebalancedfs(self.lowHigh['buy'],'col')
+            self.lowHigh['sell'],_ = self.rebalancedfs(self.lowHigh['sell'],'col')
+            print('rebalanced dfs due to ltp_df overflow.')
+
+
+
+
+    def update_agg(self,ltp,delta,delta_type):
+        """ Update agg df, and indexes"""
+        ltp = int(ltp) #we're aggregrating ltp by integer values.
+        if self.indexes['curr_ltp'] == 0: # this is the first ever update, we need to initialize indexes
+            self.indexes['curr_ltp'] = ltp
+            self.indexes['max_ltp'] = ltp
+            self.indexes['min_ltp'] = ltp
+        
+        index = ltp-self.indexes['curr_ltp'] + self.indexes['curr_ltp_index']
+
+        if delta_type == 'b':
+            self.aggdf_buy[index] += delta
+        else:
+            self.aggdf_sell[index] += delta
+
+        #print(f'updated agg_df at index {index} for ltp {ltp} with delta {delta} and type {delta_type}')
+
+
+
+        # update indexes curr_ltp index,value
+        self.indexes['curr_ltp'] = ltp
+        self.indexes['curr_ltp_index'] = index
+        
+        # rebalance if necessary
+        cols = self.aggdf_buy.shape[0]
+        if self.indexes['curr_ltp_index'] < 10 or self.indexes['curr_ltp_index'] > cols-10:
+            print('triggering rebalance from update_agg with index:', self.indexes['curr_ltp_index'])
+            print(f'current ltp: {self.indexes["curr_ltp"]} current index: {self.indexes["curr_ltp_index"]} upperbound: {cols} lowerbound: 0')
+            self.rebalance()
+            #print('rebalancing.')
+
+        # update max and min ltp and their indexes
+        if ltp> self.indexes['max_ltp']:
+            self.indexes['max_ltp'] = ltp
+            self.indexes['max_ltp_index'] = index
+        elif ltp< self.indexes['min_ltp']:
+            self.indexes['min_ltp'] = ltp
+            self.indexes['min_ltp_index'] = index
+
+
+        
+
+
+    def update_CNDM(self,df,direction):
+        """ Update in one direction"""
+        mask = df > 0
+
+        # bounds
+        rows = np.any(mask, axis=1)
+        lower = np.argmax(rows)
+        upper = len(df) - 1 - np.argmax(rows[::-1])
+
+        # correct average
+        average = np.sum(df, axis=0) / np.sum(mask, axis=0)
+
+        # compute only where valid
+        signal = np.zeros_like(df, dtype=float)
+        signal[mask] = df[mask] / average - 1
+
+        # trim
+        trimmed = signal[lower:upper+1]
+
+        # directional cumsum
+        if direction == 'lowHigh':
+            result = trimmed.cumsum(axis=0)
+        else:
+            result = trimmed[::-1].cumsum(axis=0)[::-1]
+
+        # reinsert
+        full = np.zeros_like(df, dtype=float)
+        full[lower:upper+1] = result
+
+        return full
+   
+    
+    def update_highLow_lowHigh(self,):
+        """ Update highLow and lowHigh with the new data in aggdf. We only need to update the range between min and max ltp."""
+        
+        # we subtract index by 1 cuz we're updating it early on in update_ltp
+        self.lowHigh['buy'][self.curr_ltp_index-1] = self.update_CNDM(self.aggdf_buy,'lowHigh').reshape(-1)
+        self.lowHigh['sell'][self.curr_ltp_index-1] = self.update_CNDM(self.aggdf_sell,'lowHigh').reshape(-1)
+        self.highLow['buy'][self.curr_ltp_index-1] =self.update_CNDM(self.aggdf_buy,'highLow').reshape(-1)
+        self.highLow['sell'][self.curr_ltp_index-1] = self.update_CNDM(self.aggdf_sell,'highLow').reshape(-1)
+
+    def update_dfs(self,time, ltp,delta,delta_type):
+        """ given a df, it handles appending the new data and handles rebalancing if necessary. """
+
+        # === ltp df update ===
+        self.update_ltp(time, ltp,delta,delta_type)
+
+         # === agg df update ===
+        self.update_agg(ltp,delta,delta_type)
+
+        # === cumulative df update ===
+        self.update_highLow_lowHigh()
+
+        # === highlow and lowhigh update ===
+        pass
+
+
+    def parse(self,message):
+        try:
+            time,ltp,delta,ltp_type = self.cleaner.transform(message).values()
+        except (TypeError,AttributeError) as e:
+            # volume change is zero
+            return
+            #print('we got an error:', e)
+            #return
+        self.update_dfs(time,ltp,delta,ltp_type)
+        
 
