@@ -89,15 +89,23 @@ def graph(instance):
         instance.line_ltp_buy.setData(x, y_ltp)
         #instance.line_ltp_sell.setData(x, y_ltp)
         #update buy trend lines
-        x, y = getXY(instance.lowHighMaxes[0])
+        x, y = getXY(instance.lowHighMaxes[0]['first'])
         instance.line_upper_1_buy.setData(x, y)
-        x, y = getXY(instance.HighlowMaxes[0])
+        x, y = getXY(instance.lowHighMaxes[0]['second'])
+        instance.line_upper_2_buy.setData(x, y)
+        x, y = getXY(instance.HighlowMaxes[0]['first'])
         instance.line_lower_1_buy.setData(x, y)
+        x, y = getXY(instance.HighlowMaxes[0]['second'])
+        instance.line_lower_2_buy.setData(x, y)
         #update sell trend lines:
-        x, y = getXY(instance.lowHighMaxes[0])
+        x, y = getXY(instance.lowHighMaxes[1]['first'])
         instance.line_upper_1_sell.setData(x, y)
-        x, y = getXY(instance.HighlowMaxes[0])
+        x, y = getXY(instance.lowHighMaxes[1]['second'])
+        instance.line_upper_2_sell.setData(x, y)
+        x, y = getXY(instance.HighlowMaxes[1]['first'])
         instance.line_lower_1_sell.setData(x, y)
+        x, y = getXY(instance.HighlowMaxes[1]['second'])
+        instance.line_lower_2_sell.setData(x, y)
         #update voll_diff:
         ##
         
@@ -154,16 +162,20 @@ def graph(instance):
     buy_data = instance.total.to_numpy().T if instance.total.size > 0 else np.array([[0]])
     instance.hmap_buy = addHeatMap(plot_buy, buy_data)
 
-    instance.line_upper_1_buy = addlinePlot(plot_buy, linewidth=4, data=instance.lowHighMaxes[0], name='Buy Uptrend', color='#097969')
-    instance.line_lower_1_buy = addlinePlot(plot_buy, linewidth=4, data=instance.HighlowMaxes[0], name='Buy Downtrend', color='#fbd604')
+    instance.line_upper_1_buy = addlinePlot(plot_buy, linewidth=4, data=instance.lowHighMaxes[0]['first'], name='Buy LH Max', color='#097969')
+    instance.line_upper_2_buy = addlinePlot(plot_buy, linewidth=2, data=instance.lowHighMaxes[0]['second'], name='Buy LH Min', color='#5fd0a0')
+    instance.line_lower_1_buy = addlinePlot(plot_buy, linewidth=4, data=instance.HighlowMaxes[0]['first'], name='Buy HL Max', color='#fbd604')
+    instance.line_lower_2_buy = addlinePlot(plot_buy, linewidth=2, data=instance.HighlowMaxes[0]['second'], name='Buy HL Min', color='#ffe89a')
 
     #sell heatmaps:
     #instance.hmap_sell_LH = addHeatMap(plot_sell, instance.lowHighdf[1].to_numpy().T)
     #instance.hmap_sell_HL = addHeatMap(plot_sell, instance.highLowdf[1].to_numpy().T)
     #instance.hmap_sell = addHeatMap(plot_sell, instance.combineddf[1].to_numpy().T)
 
-    instance.line_upper_1_sell = addlinePlot(plot_buy, linewidth=4, data=instance.lowHighMaxes[1], name='Sell Uptrend', color="#184546")
-    instance.line_lower_1_sell = addlinePlot(plot_buy, linewidth=4, data=instance.HighlowMaxes[1], name='Sell Downtrend', color='#fdd750')
+    instance.line_upper_1_sell = addlinePlot(plot_buy, linewidth=4, data=instance.lowHighMaxes[1]['first'], name='Sell LH Max', color="#184546")
+    instance.line_upper_2_sell = addlinePlot(plot_buy, linewidth=2, data=instance.lowHighMaxes[1]['second'], name='Sell LH Min', color="#3b6f66")
+    instance.line_lower_1_sell = addlinePlot(plot_buy, linewidth=4, data=instance.HighlowMaxes[1]['first'], name='Sell HL Max', color='#fdd750')
+    instance.line_lower_2_sell = addlinePlot(plot_buy, linewidth=2, data=instance.HighlowMaxes[1]['second'], name='Sell HL Min', color='#fff1b8')
 
     #voll_diff:
     instance.vol_diff_50 = addlinePlot(plot_diff, linewidth=4, data=instance.voldiff_50, name='VolDiff_50', color="#a99344")
