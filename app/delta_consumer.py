@@ -16,8 +16,11 @@ def _consumer_loop(stock: str, instance) -> None:
         _, claimed, _ = r.xautoclaim(stock, group, consumer,
                                      min_idle_time=0, start_id='0-0')
         for msg_id, tick in claimed:
-            instance.parse(tick)
-            r.xack(stock, group, msg_id)
+            try:
+                instance.parse(tick)
+                r.xack(stock, group, msg_id)
+            except Exception as e:
+                logging.error(f"[CONSUMER] tick error: {e}")
 
         new = r.xreadgroup(groupname=group, consumername=consumer,
                            streams={stock: '>'}, block=10)
