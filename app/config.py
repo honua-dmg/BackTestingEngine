@@ -35,7 +35,10 @@ SIMULATION_DATE = "2025-07-03"
 CONFIG_DIR = os.path.dirname(os.path.abspath(__file__))
 STOCKS = list(json.load(open(os.path.join(CONFIG_DIR, "stocks.json")))[TEST].keys())
 
-EXCHANGE = json.load(open(os.path.join(CONFIG_DIR, "stocks.json")))[TEST][STOCKS[0]][0]
+SIMULATION_DATE = json.load(open(os.path.join(CONFIG_DIR, "stocks.json")))['date']
+
+EXCHANGE = json.load(open(os.path.join(CONFIG_DIR, "stocks.json")))[TEST][STOCKS[0]][0] # one stock at a time.
+
 DECTECTION_TYPE = 'buy'
 GRAPH = f"{EXCHANGE}:{STOCKS[0]}"
 VOLUME = True

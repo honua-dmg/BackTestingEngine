@@ -14,6 +14,7 @@ import logging
 from StockAnalyser import Cumulative_Support
 import pyqtgraph as pg
 from graph import graph
+
 class Consumer():
     def __init__(self,directory,num_consumers):
         """
@@ -26,8 +27,6 @@ class Consumer():
         stocks  = json.load(open(os.path.join(CONFIG_DIR, "stocks.json")))[TEST]
         self.directory = directory
         self.num_consumers = num_consumers
-        self.nse = self.tokenStockMapping("NSE")
-        self.bse = self.tokenStockMapping("BSE")
 
         self.consumers = {}
         self.analysers = {}
@@ -55,33 +54,8 @@ class Consumer():
             for exchange in stocks[stock]:
                 self.analysers[f'{exchange}:{stock}'] = Cumulative_Support(vol=VOLUME)
 
-    def tokenStockMapping(self,exchange):
-        """
-        Maps tokens to their corresponding stock symbols.
-        
-        Args:
-            exchange (str): The exchange name ('NSE' or 'BSE').
-        
-        Returns:
-            dict: A dictionary mapping tokens to their stock symbols.
-        """
-        df = pd.read_csv(os.path.join(CONFIG_DIR, f"{exchange}.csv"))
-        return dict(zip( df['instrument_token'],df['tradingsymbol']))
 
-    def ConvertToken(self,token):
-        """
-        Converts a token to a stock symbol.
-        
-        Args:
-            token (int): The token to convert.
-        
-        Returns:
-            str: The stock symbol corresponding to the token.
-        """
-        if token in self.nse.keys():
-            return f"NSE:{self.nse[token]}"
-        elif token in self.bse.keys():
-            return f"BSE:{self.bse[token]}"
+
 
     def do(self,msg_data):
         """        

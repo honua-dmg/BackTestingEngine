@@ -118,6 +118,7 @@ class Cumulative_Support():
         self.update_volDiff(50,self.voldiff_buy,'buy-vol')
         self.update_volDiff(20,self.voldiff_sell,'sell-vol')
         #self.update_volDiff(300,self.voldiff_300,'buy-vol')
+      
     
     def signal(self):
         """
@@ -161,7 +162,7 @@ class Cumulative_Support():
                 self.aggby = self.aggDf.index
 
             avg = (self.aggDf[f'{types[index]}-vol'].mul(self.aggby)).sum()/len(self.aggDf[self.aggDf[f'{types[index]}-vol']>0]) # count only those who contributed.
-            lowerbound = self.aggDf[self.aggDf[f'{types[index]}-vol'] != 0].index[0]
+            lowerbound = self.aggDf[self.aggDf[f'{types[index]}-vol'] != 0].index[0] #why are we doing this??
             upperbound = self.aggDf[self.aggDf[f'{types[index]}-vol'] != 0].index[-1]
             # find the fractional deviation from the average for each ltp and cumsum that shit
             lowHigh = pd.DataFrame(((self.aggDf[f'{types[index]}-vol'].mul(self.aggby))/avg - 1).loc[lowerbound:upperbound].expanding().sum(),index =range(lowerbound,upperbound+1)).reindex(self.aggDf.index).astype(float)
@@ -201,7 +202,16 @@ class Cumulative_Support():
         
 
 
-    def parse(self,message):
+            # we need to append lowHigh and Highlow to self.LowHighdf and self.HighLowdf
+            #self.lowHighdf[index] = pd.concat(axis=1,objs=[self.lowHighdf[index],lowHigh.map(lambda x: 0 if x<0 else 1)]).reindex(self.aggDf.index)
+            #self.highLowdf[index] = pd.concat(axis=1,objs=[self.highLowdf[index],highLow.map(lambda x: 0 if x<0 else 1)]).reindex(self.aggDf.index)
+
+
+        if len(self.aggDf) <2:
+            self.total= pd.concat(axis=1,
+                                    objs=[self.total,
+                                            pd.DataFrame([[np.nan]], index=[self.ltpDf.index[-1]],columns=['vol'])]
+                                    ).reindex(self.aggDf.index)
 
         try:
             kwargs = self.cleaner.transform(message)

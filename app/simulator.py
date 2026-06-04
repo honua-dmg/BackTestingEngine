@@ -11,18 +11,6 @@ import logging
 
 
 
-def tokenStockMapping(exchange):
-    """
-    Maps tokens to their corresponding stock symbols.
-    
-    Args:
-        exchange (str): The exchange name ('NSE' or 'BSE').
-    
-    Returns:
-        dict: A dictionary mapping tokens to their stock symbols.
-    """
-    df = pd.read_csv(os.path.join(CONFIG_DIR, f"{exchange}.csv"))
-    return dict(zip( df['instrument_token'],df['tradingsymbol']))
 
 def get_all_tick_data(date_str):
     """
@@ -30,25 +18,25 @@ def get_all_tick_data(date_str):
     """
 
     stocks  = json.load(open(os.path.join(CONFIG_DIR, "stocks.json")))[TEST]
-    nse = tokenStockMapping('NSE')
-    bse = tokenStockMapping('BSE')
+    mapper = get_instrument_mapper()
+    if mapper.needs_refresh():
+        mapper.refresh()
     tickdata = pd.DataFrame()
     base_path = FILEPATH
     
     for stock in STOCKS:
         nse_data = pd.DataFrame()
         bse_data = pd.DataFrame()
-        if "NSE" in stocks[stock]:
+        if "NSE" in stocks[stock]:     
             nse_path = os.path.join(base_path, "NSE",stock, f"{date_str}.csv")
             nse_data = pd.read_csv(nse_path)
-            nse_data['stonk'] = nse_data['stonk'].apply(lambda x: f"NSE:{nse[x]}")
+            nse_data['stonk'] = nse_data['stonk'].apply(lambda x: mapper.convert_token(x)) 
         if "BSE" in stocks[stock]:
             bse_path = os.path.join(base_path, "BSE",stock, f"{date_str}.csv")
             bse_data = pd.read_csv(bse_path)
-            bse_data['stonk'] = bse_data['stonk'].apply(lambda x: f"BSE:{bse[x]}")
+            bse_data['stonk'] = bse_data['stonk'].apply(lambda x: mapper.convert_token(x))
         try:
-            df = pd.concat([nse_data,bse_data],ignore_index=True)
-
+            df = pd.concat([nse_data,bse_data],ignore_index=True) # we're essentially taking either NSE or BSE, not both ofc
             tickdata = pd.concat([tickdata,df],ignore_index=True)
         except Exception as e:
             print(f"[SIMULATOR] Error reading {stock} data: {e}")
@@ -113,3 +101,7 @@ def InitialiseSimulator(date_str):
     p = multiprocessing.Process(target=Simulator_worker, args=(date_str,))
     p.start()
     return p
+
+
+if __name__ == "__main__":
+    get_all_tick_data('2026-03-17')
