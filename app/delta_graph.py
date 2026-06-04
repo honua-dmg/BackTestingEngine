@@ -1,7 +1,8 @@
 import time
 import numpy as np
 import pyqtgraph as pg
-from PyQt5.QtCore import QRectF, Qt
+from pyqtgraph.Qt import QtCore
+QRectF = QtCore.QRectF
 
 
 def _active_price_bounds(aggdf_buy, aggdf_sell):
@@ -129,8 +130,8 @@ def delta_graph(instance):
         sp_sig.setLabel("bottom", "Tick Index")
         sig_mean_line = sp_sig.plot([], [], pen=pg.mkPen(color=(0, 200, 0),   width=2), name="Mean Signal")
         sig_min_line  = sp_sig.plot([], [], pen=pg.mkPen(color=(255, 200, 0), width=2), name="Min Signal")
-        sp_sig.addLine(y=-3.5, pen=pg.mkPen(color=(120, 120, 120), width=1, style=Qt.DashLine))
-        sp_sig.addLine(y=3.5,  pen=pg.mkPen(color=(120, 120, 120), width=1, style=Qt.DashLine))
+        sp_sig.addLine(y=-3.5, pen=pg.mkPen(color=(120, 120, 120), width=1, style=QtCore.Qt.PenStyle.DashLine))
+        sp_sig.addLine(y=3.5,  pen=pg.mkPen(color=(120, 120, 120), width=1, style=QtCore.Qt.PenStyle.DashLine))
         signal_plots.append((sp_sig, sig_mean_line, sig_min_line))
 
     master = comp_plots[0]
