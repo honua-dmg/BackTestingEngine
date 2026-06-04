@@ -15,6 +15,8 @@ async def _run_async_producer(stock: str):
             if r.get('end') == 'true':
                 break
             tick = json.loads(message)
+            if 'last_price' not in tick:
+                continue
             r.xadd(stock, tick, maxlen=10000)
 
 
