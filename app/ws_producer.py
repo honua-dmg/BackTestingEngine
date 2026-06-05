@@ -3,7 +3,6 @@ import json
 import threading
 import websockets
 from config import r, STOCKS, EXCHANGE
-import time
 HOST = "ws://139.59.32.232:8765/ws"
 
 
@@ -15,8 +14,6 @@ async def _run_async_producer(stock: str):
             if r.get('end') == 'true':
                 break
             tick = json.loads(message)
-            print((type(tick), tick.keys()))
-            time.sleep(1)
             if 'data' not in tick.keys():
                 continue
             #print(tick['data'])
