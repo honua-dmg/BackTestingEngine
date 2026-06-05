@@ -188,12 +188,16 @@ def delta_graph(instance):
             comp_ltps[i].setData(x_ltp, y_ltp)
 
             arr_f = arr.astype(float)
-            with np.errstate(all='ignore'):
-                row_max  = np.nanmax(arr_f,  axis=1)
-                row_mean = np.nanmean(arr_f, axis=1)
-                row_min  = np.nanmin(arr_f,  axis=1)
+            has_data = ~np.all(np.isnan(arr_f), axis=1)
+            row_max  = np.full(arr_f.shape[0], np.nan)
+            row_mean = np.full(arr_f.shape[0], np.nan)
+            row_min  = np.full(arr_f.shape[0], np.nan)
+            if has_data.any():
+                row_max[has_data]  = np.nanmax(arr_f[has_data],  axis=1)
+                row_mean[has_data] = np.nanmean(arr_f[has_data], axis=1)
+                row_min[has_data]  = np.nanmin(arr_f[has_data],  axis=1)
 
-            valid = np.isfinite(row_max) | np.isfinite(row_mean) | np.isfinite(row_min)
+            valid = has_data
             if np.any(valid):
                 xv = np.arange(rows_used, dtype=float)[valid]
                 _, sp_max, sp_mean, sp_min = stat_plots[i]

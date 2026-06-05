@@ -1,6 +1,19 @@
+import json
 import threading
 import logging
 from config import r
+
+
+def _deserialize(tick: dict) -> dict:
+    result = {}
+    for k, v in tick.items():
+        key = k.decode() if isinstance(k, bytes) else k
+        val = v.decode() if isinstance(v, bytes) else v
+        try:
+            result[key] = json.loads(val)
+        except (json.JSONDecodeError, TypeError):
+            result[key] = val
+    return result
 
 
 def _consumer_loop(stock: str, instance) -> None:
@@ -17,7 +30,7 @@ def _consumer_loop(stock: str, instance) -> None:
                                      min_idle_time=0, start_id='0-0')
         for msg_id, tick in claimed:
             try:
-                instance.parse(tick)
+                instance.parse(_deserialize(tick))
                 r.xack(stock, group, msg_id)
             except Exception as e:
                 logging.error(f"[CONSUMER] tick error: {e}")
@@ -28,7 +41,7 @@ def _consumer_loop(stock: str, instance) -> None:
             for _, messages in new:
                 for msg_id, tick in messages:
                     try:
-                        instance.parse(tick)
+                        instance.parse(_deserialize(tick))
                         r.xack(stock, group, msg_id)
                     except Exception as e:
                         logging.error(f"[CONSUMER] tick error: {e}")
