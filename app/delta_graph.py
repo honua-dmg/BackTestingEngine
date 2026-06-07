@@ -6,10 +6,13 @@ QRectF = QtCore.QRectF
 
 
 def _active_price_bounds(aggdf_buy, aggdf_sell):
-    active = np.where((aggdf_buy > 0) & (aggdf_sell > 0))[0]
+    active = np.where((aggdf_buy > 0) | (aggdf_sell > 0))[0]
     if active.size == 0:
         return 0, max(0, len(aggdf_buy) - 1)
-    return int(active[0]), int(active[-1])
+    pad = 10
+    lo = max(0, int(active[0]) - pad)
+    hi = min(len(aggdf_buy) - 1, int(active[-1]) + pad)
+    return lo, hi
 
 
 def _make_component_map(arr, true_code):
@@ -164,7 +167,7 @@ def delta_graph(instance):
         sell_code[valid_sell] = (lh_sell[valid_sell] >= 0).astype(np.uint8) + 2 * (hl_sell[valid_sell] >= 0).astype(np.uint8)
 
         heatmap = sell_code + 4 * buy_code
-        heatmap[~(valid_buy & valid_sell)] = 16
+        heatmap[~(valid_buy | valid_sell)] = 16
 
         min_ltp = float(instance.base_ltp + min_idx)
         max_ltp = float(instance.base_ltp + max_idx)
