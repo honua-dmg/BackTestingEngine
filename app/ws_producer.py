@@ -26,7 +26,7 @@ async def _run_async_producer(stock: str):
                     tick = json.loads(message)
                     if 'data' not in tick:
                         continue
-                    payload = {k: (json.dumps(v) if isinstance(v, (dict, list)) else v)
+                    payload = {k: (json.dumps(v) if isinstance(v, (dict, list, type(None))) else v)
                                for k, v in tick['data'].items()}
                     r.xadd(stock, payload, maxlen=10000)
                     print(f"[PRODUCER] {stock}: {payload.get('last_price')} @ {payload.get('timestamp')}")
