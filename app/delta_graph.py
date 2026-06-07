@@ -1,7 +1,7 @@
 import time
 import numpy as np
 import pyqtgraph as pg
-from pyqtgraph.Qt import QtCore
+from pyqtgraph.Qt import QtCore, QtWidgets
 QRectF = QtCore.QRectF
 
 
@@ -145,6 +145,22 @@ def delta_graph(instance):
     for w in (win_combined, win_components, win_stats):
         w.show()
 
+    signal_visible = [True]
+
+    toggle_btn = QtWidgets.QPushButton("Hide d1/MAD")
+    toggle_btn.setCheckable(True)
+
+    def _toggle_signals(checked):
+        visible = not checked
+        signal_visible[0] = visible
+        toggle_btn.setText("Show d1/MAD" if checked else "Hide d1/MAD")
+        for sp_sig, _, _ in signal_plots:
+            sp_sig.setVisible(visible)
+
+    toggle_btn.toggled.connect(_toggle_signals)
+    toggle_btn.setFixedWidth(120)
+    toggle_btn.show()
+
     def update():
         rows_used = int(instance.curr_time_idx)
         if rows_used < 1:
@@ -208,14 +224,15 @@ def delta_graph(instance):
                 sp_mean.setData(xv, row_mean[valid])
                 sp_min.setData(xv,  row_min[valid])
 
-                _, sig_mean_line, sig_min_line = signal_plots[i]
-                sig_m = _first_order_mad_signal(row_mean)
-                sig_n = _first_order_mad_signal(row_min)
-                vs = np.isfinite(sig_m) | np.isfinite(sig_n)
-                if np.any(vs):
-                    xs = np.arange(rows_used, dtype=float)[vs]
-                    sig_mean_line.setData(xs, sig_m[vs])
-                    sig_min_line.setData(xs,  sig_n[vs])
+                if signal_visible[0]:
+                    _, sig_mean_line, sig_min_line = signal_plots[i]
+                    sig_m = _first_order_mad_signal(row_mean)
+                    sig_n = _first_order_mad_signal(row_min)
+                    vs = np.isfinite(sig_m) | np.isfinite(sig_n)
+                    if np.any(vs):
+                        xs = np.arange(rows_used, dtype=float)[vs]
+                        sig_mean_line.setData(xs, sig_m[vs])
+                        sig_min_line.setData(xs,  sig_n[vs])
 
     timer = pg.QtCore.QTimer()
     timer.timeout.connect(update)
