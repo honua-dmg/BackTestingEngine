@@ -6,6 +6,8 @@ QRectF = QtCore.QRectF
 
 # A "drop" is a tick-to-tick fall in the count>0 of more than this many cells.
 COUNT_DROP_THRESHOLD = 10
+# A "spike" is |d1 of max| exceeding this many points (cross markers).
+SPIKE_THRESHOLD = 5.0
 # One colour per signal: buys green shades, sells red shades.
 SPIKE_COLORS = [
     (  0, 150,   0),   # hl_buy  - dark green
@@ -135,7 +137,7 @@ def delta_graph(instance):
     # Spike markers on the combined ("main") graph: one colour per signal,
     # with a legend mapping colour -> signal.
     legend = p_combined.addLegend(offset=(10, 10))
-    spike_scatters = []
+    drop_scatters, max_scatters = [], []
     for (label, *_), color in zip(component_specs, SPIKE_COLORS):
         sc = pg.ScatterPlotItem(
             size=12, symbol='o',
@@ -144,7 +146,16 @@ def delta_graph(instance):
         )
         p_combined.addItem(sc)
         legend.addItem(sc, f"{label} drop (>{COUNT_DROP_THRESHOLD:g})")
-        spike_scatters.append(sc)
+        drop_scatters.append(sc)
+
+        xc = pg.ScatterPlotItem(
+            size=14, symbol='x',
+            pen=pg.mkPen(color=color, width=2),
+            brush=pg.mkBrush(*color),
+        )
+        p_combined.addItem(xc)
+        legend.addItem(xc, f"{label} spike (|d1|>{SPIKE_THRESHOLD:g})")
+        max_scatters.append(xc)
 
     master = comp_plots[0]
     for p in comp_plots[1:]:
@@ -243,7 +254,12 @@ def delta_graph(instance):
             d_cnt = _first_order_diff(cnt)
             drop = (d_cnt < -COUNT_DROP_THRESHOLD) & valid_ltp
             drop_idx = np.nonzero(drop)[0]
-            spike_scatters[i].setData(drop_idx.astype(float), ltp_vals[drop_idx])
+            drop_scatters[i].setData(drop_idx.astype(float), ltp_vals[drop_idx])
+
+            sig_x = _first_order_diff(row_max)
+            spike = (np.abs(sig_x) > SPIKE_THRESHOLD) & valid_ltp
+            spike_idx = np.nonzero(spike)[0]
+            max_scatters[i].setData(spike_idx.astype(float), ltp_vals[spike_idx])
 
     timer = pg.QtCore.QTimer()
     timer.timeout.connect(update)
