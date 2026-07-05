@@ -4,15 +4,14 @@ import pyqtgraph as pg
 from pyqtgraph.Qt import QtCore, QtWidgets
 QRectF = QtCore.QRectF
 
-# A "spike" is a first-order diff (of the max value) whose magnitude exceeds
-# this many points.
-SPIKE_THRESHOLD = 5.0
-# One distinct colour per signal, for spike markers on the combined graph.
+# A "drop" is a tick-to-tick fall in the count>0 of more than this many cells.
+COUNT_DROP_THRESHOLD = 10
+# One colour per signal: buys green shades, sells red shades.
 SPIKE_COLORS = [
-    (220,  20,  60),   # hl_buy  - crimson
-    (255, 140,   0),   # lh_buy  - orange
-    (148,   0, 211),   # hl_sell - purple
-    (  0, 180, 180),   # lh_sell - teal
+    (  0, 150,   0),   # hl_buy  - dark green
+    (100, 220, 100),   # lh_buy  - light green
+    (150,   0,   0),   # hl_sell - dark red
+    (240, 100, 100),   # lh_sell - light red
 ]
 
 
@@ -120,19 +119,18 @@ def delta_graph(instance):
         sp.showGrid(x=True, y=True, alpha=0.15)
         sp.setLabel("left", "Value")
         sp.setLabel("bottom", "Tick Index")
-        sp_max  = sp.plot([], [], pen=pg.mkPen(color=(0, 0, 255),  width=2), name="Max")
-        sp_mean = sp.plot([], [], pen=pg.mkPen(color=(0, 200, 0),   width=2), name="Mean")
-        sp_min  = sp.plot([], [], pen=pg.mkPen(color=(255, 200, 0), width=2), name="Min")
+        sp_max   = sp.plot([], [], pen=pg.mkPen(color=(0, 0, 255),  width=2), name="Max")
+        sp_mean  = sp.plot([], [], pen=pg.mkPen(color=(0, 200, 0),   width=2), name="Mean")
+        sp_min   = sp.plot([], [], pen=pg.mkPen(color=(255, 200, 0), width=2), name="Min")
         stat_plots.append((sp, sp_max, sp_mean, sp_min))
 
-        sp_sig = win_stats.addPlot(row=row * 2 + 1, col=col, title=f"{label} d1")
-        sp_sig.showGrid(x=True, y=True, alpha=0.15)
-        sp_sig.setLabel("left", "Diff")
-        sp_sig.setLabel("bottom", "Tick Index")
-        sig_mean_line = sp_sig.plot([], [], pen=pg.mkPen(color=(0, 200, 0),   width=2), name="Mean Signal")
-        sig_min_line  = sp_sig.plot([], [], pen=pg.mkPen(color=(255, 200, 0), width=2), name="Min Signal")
-        sp_sig.addLine(y=0, pen=pg.mkPen(color=(120, 120, 120), width=1, style=QtCore.Qt.PenStyle.DashLine))
-        signal_plots.append((sp_sig, sig_mean_line, sig_min_line))
+        sp_cnt = win_stats.addPlot(row=row * 2 + 1, col=col, title=f"{label} Cnt>0")
+        sp_cnt.showGrid(x=True, y=True, alpha=0.15)
+        sp_cnt.setLabel("left", "Count")
+        sp_cnt.setLabel("bottom", "Tick Index")
+        sp_cnt.setXLink(sp)
+        cnt_line = sp_cnt.plot([], [], pen=pg.mkPen(color=(200, 0, 200), width=2), name="Cnt>0")
+        signal_plots.append((sp_cnt, cnt_line))
 
     # Spike markers on the combined ("main") graph: one colour per signal,
     # with a legend mapping colour -> signal.
@@ -145,7 +143,7 @@ def delta_graph(instance):
             pen=pg.mkPen(color=(0, 0, 0, 150), width=0.5),
         )
         p_combined.addItem(sc)
-        legend.addItem(sc, f"{label} spike (|d1|>{SPIKE_THRESHOLD:g})")
+        legend.addItem(sc, f"{label} drop (>{COUNT_DROP_THRESHOLD:g})")
         spike_scatters.append(sc)
 
     master = comp_plots[0]
@@ -158,15 +156,15 @@ def delta_graph(instance):
 
     signal_visible = [True]
 
-    toggle_btn = QtWidgets.QPushButton("Hide d1")
+    toggle_btn = QtWidgets.QPushButton("Hide Cnt")
     toggle_btn.setCheckable(True)
 
     def _toggle_signals(checked):
         visible = not checked
         signal_visible[0] = visible
-        toggle_btn.setText("Show d1" if checked else "Hide d1")
-        for sp_sig, _, _ in signal_plots:
-            sp_sig.setVisible(visible)
+        toggle_btn.setText("Show Cnt" if checked else "Hide Cnt")
+        for sp_cnt, _ in signal_plots:
+            sp_cnt.setVisible(visible)
 
     toggle_btn.toggled.connect(_toggle_signals)
     toggle_btn.setFixedWidth(120)
@@ -236,21 +234,16 @@ def delta_graph(instance):
                 sp_min.setData(xv,  row_min[valid])
 
                 if signal_visible[0]:
-                    _, sig_mean_line, sig_min_line = signal_plots[i]
-                    sig_m = _first_order_diff(row_mean)
-                    sig_n = _first_order_diff(row_min)
-                    vs = np.isfinite(sig_m) | np.isfinite(sig_n)
-                    if np.any(vs):
-                        xs = np.arange(rows_used, dtype=float)[vs]
-                        sig_mean_line.setData(xs, sig_m[vs])
-                        sig_min_line.setData(xs,  sig_n[vs])
+                    _, cnt_line = signal_plots[i]
+                    cnt_line.setData(xv, (arr_f[valid] > 0).sum(axis=1))
 
-            # Mark ticks where the max d1 spikes by more than SPIKE_THRESHOLD
-            # points on the combined LTP graph, colour-coded per signal.
-            sig_x = _first_order_diff(row_max)
-            spike = (np.abs(sig_x) > SPIKE_THRESHOLD) & valid_ltp
-            spike_idx = np.nonzero(spike)[0]
-            spike_scatters[i].setData(spike_idx.astype(float), ltp_vals[spike_idx])
+            # Mark ticks where count>0 suddenly drops by more than the
+            # threshold on the combined LTP graph, colour-coded per signal.
+            cnt = (arr_f > 0).sum(axis=1).astype(float)
+            d_cnt = _first_order_diff(cnt)
+            drop = (d_cnt < -COUNT_DROP_THRESHOLD) & valid_ltp
+            drop_idx = np.nonzero(drop)[0]
+            spike_scatters[i].setData(drop_idx.astype(float), ltp_vals[drop_idx])
 
     timer = pg.QtCore.QTimer()
     timer.timeout.connect(update)
