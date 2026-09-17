@@ -2,6 +2,18 @@ import json
 import threading
 import logging
 from config import r
+from StockAnalyser import Delta_analysis
+from mark_detector import MarkDetector
+
+SIGNAL_STREAM_MAXLEN = 10000
+
+
+def _publish_marks(stock: str, detector: MarkDetector, instance: Delta_analysis) -> None:
+    for evt in detector.update(instance):
+        try:
+            r.xadd(f"{stock}:signals", evt, maxlen=SIGNAL_STREAM_MAXLEN, approximate=True)
+        except Exception as e:
+            logging.error(f"[CONSUMER] signal publish error: {e}")
 
 
 def _deserialize(tick: dict) -> dict:
@@ -16,9 +28,10 @@ def _deserialize(tick: dict) -> dict:
     return result
 
 
-def _consumer_loop(stock: str, instance) -> None:
+def _consumer_loop(stock: str, instance:Delta_analysis) -> None:
     group = stock
     consumer = stock
+    detector = MarkDetector()
     try:
         r.xgroup_create(name=stock, groupname=group, mkstream=True, id='0')
     except Exception:
@@ -32,6 +45,7 @@ def _consumer_loop(stock: str, instance) -> None:
             try:
                 instance.parse(_deserialize(tick))
                 r.xack(stock, group, msg_id)
+                _publish_marks(stock, detector, instance)
             except Exception as e:
                 logging.error(f"[CONSUMER] tick error: {e}")
 
@@ -43,6 +57,7 @@ def _consumer_loop(stock: str, instance) -> None:
                     try:
                         instance.parse(_deserialize(tick))
                         r.xack(stock, group, msg_id)
+                        _publish_marks(stock, detector, instance)
                     except Exception as e:
                         logging.error(f"[CONSUMER] tick error: {e}")
 

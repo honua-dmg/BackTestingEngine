@@ -4,6 +4,7 @@ from StockAnalyser import Delta_analysis
 from ws_producer import start_producer
 from delta_consumer import start_consumer
 from delta_graph import delta_graph
+from signal_dashboard import start_dashboard
 
 
 def run():
@@ -21,6 +22,7 @@ def run():
     instance = Delta_analysis()
     producer_thread = start_producer(stock)
     consumer_thread = start_consumer(stock, instance)
+    dashboard_thread = start_dashboard(stock)
 
     try:
         delta_graph(instance)  # blocks on Qt event loop
@@ -30,6 +32,7 @@ def run():
         r.set('end', 'true')
         producer_thread.join(timeout=5)
         consumer_thread.join(timeout=5)
+        dashboard_thread.join(timeout=5)
         logging.info("[MAIN] exited cleanly")
 
 
