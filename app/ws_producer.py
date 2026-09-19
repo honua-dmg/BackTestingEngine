@@ -1,11 +1,12 @@
 import asyncio
 import json
 import logging
+import os
 import threading
 import websockets
 from config import r, STOCKS, EXCHANGE
 
-HOST = "ws://139.59.32.232:8765/ws"
+HOST = os.getenv("WS_HOST", "ws://139.59.32.232:8765/ws")
 
 
 async def _run_async_producer(stock: str):
