@@ -56,6 +56,19 @@ def _first_order_diff(series):
     return np.diff(series, prepend=np.nan)
 
 
+def _cumulative_pos_pct(arr):
+    """Per-row cumulative (tick 0..row) % of valid cells that are >=0."""
+    # ponytail: same math as backtest.export_mark_stats.cumulative_pos_neg_pct,
+    # duplicated because importing that module pulls in config/S3 credentials.
+    valid = ~np.isnan(arr)
+    cum_valid = np.cumsum(valid.sum(axis=1).astype(float))
+    cum_pos = np.cumsum((valid & (arr >= 0)).sum(axis=1).astype(float))
+    pct = np.full(cum_valid.shape, np.nan)
+    has_data = cum_valid > 0
+    pct[has_data] = 100.0 * cum_pos[has_data] / cum_valid[has_data]
+    return pct
+
+
 def _active_bounds_series(arr, min_idx, base_ltp):
     """Per-row min/max active LTP lines for a component array."""
     price_axis = base_ltp + np.arange(min_idx, min_idx + arr.shape[1], dtype=float)
@@ -99,7 +112,7 @@ FULL_LUT[:17] = BASE_LUT
 
 def build_windows(sync_ranges=False):
     """
-    Build the three-window Qt scene and return handles to everything render()
+    Build the four-window Qt scene and return handles to everything render()
     writes into. sync_ranges links pan/zoom across all windows (the notebook's
     behaviour); the live graph leaves it off and only links the component plots.
     """
@@ -108,7 +121,8 @@ def build_windows(sync_ranges=False):
     win_combined   = pg.GraphicsLayoutWidget(title="Combined")
     win_components = pg.GraphicsLayoutWidget(title="Components")
     win_stats      = pg.GraphicsLayoutWidget(title="Stats")
-    for w in (win_combined, win_components, win_stats):
+    win_pct        = pg.GraphicsLayoutWidget(title="Pos%")
+    for w in (win_combined, win_components, win_stats, win_pct):
         w.setBackground("white")
 
     p_combined = win_combined.addPlot(title="Combined State (0..15)")
@@ -161,6 +175,24 @@ def build_windows(sync_ranges=False):
         cnt_line = sp_cnt.plot([], [], pen=pg.mkPen(color=(200, 0, 200), width=2), name="Cnt>0")
         signal_plots.append((sp_cnt, cnt_line))
 
+    # Cumulative pos% differentials: buy-vs-sell bias, and HL-vs-LH skew per side.
+    p_bias = win_pct.addPlot(row=0, col=0, title="(hl_buy+lh_buy) - (hl_sell+lh_sell) pos%")
+    p_bias.showGrid(x=True, y=True, alpha=0.15)
+    p_bias.setLabel("left", "pos% diff")
+    p_bias.setLabel("bottom", "Tick Index")
+    p_bias.addLine(y=0, pen=pg.mkPen(color=(150, 150, 150), width=1, style=QtCore.Qt.PenStyle.DashLine))
+    bias_line = p_bias.plot([], [], pen=pg.mkPen(color=(0, 0, 255), width=2), name="buy - sell")
+
+    p_skew = win_pct.addPlot(row=1, col=0, title="hl - lh pos% (per side)")
+    p_skew.showGrid(x=True, y=True, alpha=0.15)
+    p_skew.setLabel("left", "pos% diff")
+    p_skew.setLabel("bottom", "Tick Index")
+    p_skew.setXLink(p_bias)
+    p_skew.addLine(y=0, pen=pg.mkPen(color=(150, 150, 150), width=1, style=QtCore.Qt.PenStyle.DashLine))
+    skew_legend = p_skew.addLegend(offset=(10, 10))
+    skew_buy_line  = p_skew.plot([], [], pen=pg.mkPen(color=(0, 150, 0), width=2), name="hl_buy - lh_buy")
+    skew_sell_line = p_skew.plot([], [], pen=pg.mkPen(color=(150, 0, 0), width=2), name="hl_sell - lh_sell")
+
     # Spike markers on the combined ("main") graph: one colour per signal,
     # with a legend mapping colour -> signal.
     legend = p_combined.addLegend(offset=(10, 10))
@@ -189,7 +221,7 @@ def build_windows(sync_ranges=False):
         p.setXLink(master)
         p.setYLink(master)
 
-    for w in (win_combined, win_components, win_stats):
+    for w in (win_combined, win_components, win_stats, win_pct):
         w.show()
 
     signal_visible = [True]
@@ -210,7 +242,7 @@ def build_windows(sync_ranges=False):
 
     w = {
         "app": app,
-        "windows": (win_combined, win_components, win_stats),
+        "windows": (win_combined, win_components, win_stats, win_pct),
         "p_combined": p_combined,
         "img_combined": img_combined,
         "ltp_line_combined": ltp_line_combined,
@@ -224,6 +256,10 @@ def build_windows(sync_ranges=False):
         "drop_scatters": drop_scatters,
         "max_scatters": max_scatters,
         "signal_visible": signal_visible,
+        "bias_line": bias_line,
+        "skew_buy_line": skew_buy_line,
+        "skew_sell_line": skew_sell_line,
+        "skew_legend": skew_legend,
         # held so Qt doesn't garbage-collect the button and its connection
         "toggle_btn": toggle_btn,
     }
@@ -345,10 +381,23 @@ def render(instance, w):
         spike_idx = np.nonzero((np.abs(sig_x) > SPIKE_THRESHOLD) & valid_ltp)[0]
         w["max_scatters"][i].setData(spike_idx.astype(float), ltp_vals[spike_idx])
 
+    # Cumulative pos% differentials. arrays order is hl_buy, lh_buy, hl_sell, lh_sell.
+    pct_hl_buy, pct_lh_buy, pct_hl_sell, pct_lh_sell = (
+        _cumulative_pos_pct(a.astype(float)) for a in arrays
+    )
+    bias = (pct_hl_buy + pct_lh_buy) - (pct_hl_sell + pct_lh_sell)
+    skew_buy  = pct_hl_buy  - pct_lh_buy
+    skew_sell = pct_hl_sell - pct_lh_sell
+    for key, series in (("bias_line", bias),
+                        ("skew_buy_line", skew_buy),
+                        ("skew_sell_line", skew_sell)):
+        fin = np.isfinite(series)
+        w[key].setData(row_x[fin], series[fin])
+
 
 def delta_graph(instance):
     """
-    Launch the live 3-window PyQtGraph visualization.
+    Launch the live 4-window PyQtGraph visualization.
     Blocks on app.exec() — must be called from the main thread.
     """
     while instance.curr_time_idx == 0:
