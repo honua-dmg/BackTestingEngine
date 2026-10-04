@@ -9,7 +9,15 @@ SIGNAL_STREAM_MAXLEN = 10000
 
 
 def _publish_marks(stock: str, detector: MarkDetector, instance: Delta_analysis) -> None:
-    for evt in detector.update(instance):
+    # Guards both stages separately: a detection or publish failure must not be
+    # reported as a tick error, and must never interrupt tick processing.
+    try:
+        events = detector.update(instance)
+    except Exception as e:
+        logging.error(f"[CONSUMER] mark detection error: {e}")
+        return
+
+    for evt in events:
         try:
             r.xadd(f"{stock}:signals", evt, maxlen=SIGNAL_STREAM_MAXLEN, approximate=True)
         except Exception as e:

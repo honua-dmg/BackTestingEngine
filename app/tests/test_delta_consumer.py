@@ -36,7 +36,8 @@ def test_consumer_calls_parse_for_each_claimed_message():
         return 'true' if calls[0] > 2 else 'false'
 
     mock_r.get.side_effect = fake_get
-    instance = MagicMock(spec=Delta_analysis)
+    instance = MagicMock(spec=Delta_analysis())
+    instance.curr_time_idx = 0  # no rows yet: mark detection no-ops instead of erroring
 
     with patch('delta_consumer.r', mock_r):
         from delta_consumer import start_consumer
@@ -51,7 +52,8 @@ def test_start_consumer_returns_thread():
     mock_r.xautoclaim.return_value = (None, [], None)
     mock_r.xreadgroup.return_value = None
     mock_r.get.return_value = 'true'
-    instance = MagicMock(spec=Delta_analysis)
+    instance = MagicMock(spec=Delta_analysis())
+    instance.curr_time_idx = 0  # no rows yet: mark detection no-ops instead of erroring
 
     with patch('delta_consumer.r', mock_r):
         from delta_consumer import start_consumer
