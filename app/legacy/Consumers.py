@@ -13,7 +13,7 @@ import math
 import logging
 from StockAnalyser import Cumulative_Support
 import pyqtgraph as pg
-from graph import graph
+from legacy.graph import graph
 
 class Consumer():
     def __init__(self,directory,num_consumers):
