@@ -3,7 +3,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 import numpy as np
 
-from mark_detector import MarkDetector, COUNT_DROP_THRESHOLD, SPIKE_THRESHOLD
+from live.mark_detector import MarkDetector, COUNT_DROP_THRESHOLD, SPIKE_THRESHOLD
 
 
 class _FakeInstance:

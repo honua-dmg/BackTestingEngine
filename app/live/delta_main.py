@@ -1,10 +1,10 @@
 import logging
 from config import r, STOCKS, EXCHANGE
 from StockAnalyser import Delta_analysis
-from ws_producer import start_producer
-from delta_consumer import start_consumer
-from delta_graph import delta_graph
-from signal_dashboard import start_dashboard
+from live.ws_producer import start_producer
+from live.delta_consumer import start_consumer
+from live.delta_graph import delta_graph
+from live.signal_dashboard import start_dashboard
 
 
 def run():

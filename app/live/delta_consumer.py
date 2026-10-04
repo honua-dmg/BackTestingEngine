@@ -3,7 +3,7 @@ import threading
 import logging
 from config import r
 from StockAnalyser import Delta_analysis
-from mark_detector import MarkDetector
+from live.mark_detector import MarkDetector
 
 SIGNAL_STREAM_MAXLEN = 10000
 

@@ -39,8 +39,8 @@ def test_consumer_calls_parse_for_each_claimed_message():
     instance = MagicMock(spec=Delta_analysis())
     instance.curr_time_idx = 0  # no rows yet: mark detection no-ops instead of erroring
 
-    with patch('delta_consumer.r', mock_r):
-        from delta_consumer import start_consumer
+    with patch('live.delta_consumer.r', mock_r):
+        from live.delta_consumer import start_consumer
         t = start_consumer('NSE:RELIANCE', instance)
         t.join(timeout=3)
 
@@ -55,8 +55,8 @@ def test_start_consumer_returns_thread():
     instance = MagicMock(spec=Delta_analysis())
     instance.curr_time_idx = 0  # no rows yet: mark detection no-ops instead of erroring
 
-    with patch('delta_consumer.r', mock_r):
-        from delta_consumer import start_consumer
+    with patch('live.delta_consumer.r', mock_r):
+        from live.delta_consumer import start_consumer
         t = start_consumer('NSE:RELIANCE', instance)
         t.join(timeout=3)
         assert isinstance(t, threading.Thread)

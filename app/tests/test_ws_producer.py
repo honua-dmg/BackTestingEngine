@@ -50,9 +50,9 @@ def test_producer_pushes_each_message_to_redis():
 
     mock_r.get.side_effect = fake_get
 
-    with patch('ws_producer.websockets.connect', new=_fake_ws_connect([TICK, TICK])), \
-         patch('ws_producer.r', mock_r):
-        from ws_producer import _run_async_producer
+    with patch('live.ws_producer.websockets.connect', new=_fake_ws_connect([TICK, TICK])), \
+         patch('live.ws_producer.r', mock_r):
+        from live.ws_producer import _run_async_producer
         asyncio.run(_run_async_producer('NSE:RELIANCE'))
 
     assert mock_r.xadd.call_count == 2
@@ -70,9 +70,9 @@ def test_producer_stops_on_end_flag():
 
     mock_r.get.side_effect = fake_get
 
-    with patch('ws_producer.websockets.connect', new=_fake_ws_connect([TICK, TICK, TICK])), \
-         patch('ws_producer.r', mock_r):
-        from ws_producer import _run_async_producer
+    with patch('live.ws_producer.websockets.connect', new=_fake_ws_connect([TICK, TICK, TICK])), \
+         patch('live.ws_producer.r', mock_r):
+        from live.ws_producer import _run_async_producer
         asyncio.run(_run_async_producer('NSE:RELIANCE'))
 
     assert mock_r.xadd.call_count <= 1
@@ -90,9 +90,9 @@ def test_start_producer_returns_thread():
 
     mock_r.get.side_effect = fake_get
 
-    with patch('ws_producer.websockets.connect', new=_fake_ws_connect([])), \
-         patch('ws_producer.r', mock_r):
-        from ws_producer import start_producer
+    with patch('live.ws_producer.websockets.connect', new=_fake_ws_connect([])), \
+         patch('live.ws_producer.r', mock_r):
+        from live.ws_producer import start_producer
         t = start_producer('NSE:RELIANCE')
         t.join(timeout=3)
         assert isinstance(t, threading.Thread)
