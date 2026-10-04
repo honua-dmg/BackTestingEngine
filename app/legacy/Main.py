@@ -8,7 +8,7 @@ import dotenv
 import os
 import logging
 from config import r,STOCKS,FILEPATH,SIMULATION_DATE,s3,EXCHANGE
-import simulator
+from backtest import simulator
 from pymemcache.client.base import Client
 memcached_client = Client((os.getenv('MEMCACHE_HOST','memcache'), int(os.getenv("MEMCACHE_PORT",11211))), encoding='utf-8')
 PATH = FILEPATH

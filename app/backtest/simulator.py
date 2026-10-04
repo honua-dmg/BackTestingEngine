@@ -6,11 +6,11 @@ import json
 from config import r,STOCKS,CONFIG_DIR,TEST
 import multiprocessing
 import logging
-import Auth
+from retrieval import Auth
 from kiteconnect import KiteConnect
 import requests
 import io
-from utils import get_instrument_mapper
+from retrieval.utils import get_instrument_mapper
 FILEPATH = os.getenv("FILEPATH")
 
 

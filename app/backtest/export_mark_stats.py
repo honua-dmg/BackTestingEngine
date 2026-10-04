@@ -14,7 +14,7 @@ import pandas as pd
 from botocore.exceptions import ClientError
 
 from config import EXCHANGE, FILEPATH, STOCKS, s3
-from simulator import get_all_tick_data
+from backtest.simulator import get_all_tick_data
 from StockAnalyser import Delta_analysis
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')

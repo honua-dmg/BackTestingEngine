@@ -3,7 +3,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 import numpy as np
 
-from export_mark_stats import cumulative_pos_neg_pct, compute_mark_stats
+from backtest.export_mark_stats import cumulative_pos_neg_pct, compute_mark_stats
 
 
 def test_cumulative_pos_neg_pct_basic():
