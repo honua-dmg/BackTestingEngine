@@ -3,7 +3,9 @@ import os
 import dotenv
 import json
 import boto3
-ENVLOC = '.env'
+# Try Docker path first, then local path. Not a bare '.env': entry points run
+# as `python -m ...` from app/, so a relative path resolves to nothing.
+ENVLOC = '/app/.env' if os.path.exists('/app/.env') else os.path.join(os.path.dirname(__file__), '../.env')
 dotenv.load_dotenv(ENVLOC)
 # Centralized Redis connection
 # Use a single connection pool that is shared across the application.

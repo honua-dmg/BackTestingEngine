@@ -3,7 +3,6 @@ data/
 downloaded_files/
 test/
 testing/
-downloaded_files/
 #testing
 ./test.ipynb
 ./test2.ipynb
@@ -176,7 +175,6 @@ deux.ipynb
 test.ipynb
 test.txt
 *.pyc
-__pycache__/
 
 test.csv
-test.csv
+*.rdb

@@ -3,20 +3,21 @@ import os
 import time
 import datetime as dt
 import json
-from config import r,STOCKS,CONFIG_DIR,TEST,FILEPATH,EXCHANGE,s3
+from config import r,STOCKS,CONFIG_DIR,TEST
 import multiprocessing
 import logging
-
-
-
-
+from retrieval import Auth
+from kiteconnect import KiteConnect
+import requests
+import io
+from retrieval.utils import get_instrument_mapper
+FILEPATH = os.getenv("FILEPATH")
 
 
 def get_all_tick_data(date_str):
     """
     Reads all CSV files for a given date, combines them, and sorts by timestamp.
     """
-
     stocks  = json.load(open(os.path.join(CONFIG_DIR, "stocks.json")))[TEST]
     mapper = get_instrument_mapper()
     if mapper.needs_refresh():

@@ -230,3 +230,147 @@ class Cumulative_Support():
         
 
     
+
+
+# We'll keep initial allocations relatively small to save memory, 
+# because our new logic will dynamically grow them when needed.
+
+
+INITIAL_HEIGHT = 15000 
+INITIAL_WIDTH = 400
+
+class Delta_analysis():
+    def __init__(self, volOrQty=True):
+        self.cleaner = Algo1() 
+        self.volOrQty = volOrQty
+        self.HEIGHT = INITIAL_HEIGHT
+        self.WIDTH = INITIAL_WIDTH
+        
+        # Initialize with NaN to guarantee transparent backgrounds
+        self.highLow = {'buy': np.full((self.HEIGHT, self.WIDTH), np.nan), 'sell': np.full((self.HEIGHT, self.WIDTH), np.nan)}
+        self.lowHigh = {'buy': np.full((self.HEIGHT, self.WIDTH), np.nan), 'sell': np.full((self.HEIGHT, self.WIDTH), np.nan)}
+        
+        self.aggdf_buy = np.zeros(self.WIDTH)
+        self.aggdf_sell = np.zeros(self.WIDTH)
+        self.ltpdf = np.zeros((self.HEIGHT, 4)) 
+
+        self.curr_time_idx = 0  
+        self.base_ltp = None    
+        self.lowHighMaxes = {'buy': [], 'sell': []}
+        self.highLowMaxes = {'buy': [], 'sell': []}
+
+    def _ensure_time_bounds(self):
+        if self.curr_time_idx >= self.HEIGHT:
+            pad_size = 5000 
+            self.ltpdf = np.pad(self.ltpdf, ((0, pad_size), (0, 0)), 'constant')
+            
+            # Pad with NaN
+            for k in ['buy', 'sell']:
+                self.highLow[k] = np.pad(self.highLow[k], ((0, pad_size), (0, 0)), 'constant', constant_values=np.nan)
+                self.lowHigh[k] = np.pad(self.lowHigh[k], ((0, pad_size), (0, 0)), 'constant', constant_values=np.nan)
+            self.HEIGHT += pad_size
+
+    def _ensure_price_bounds(self, ltp):
+        ltp = int(ltp)
+        if self.base_ltp is None:
+            self.base_ltp = ltp - (self.WIDTH // 2)
+            return ltp - self.base_ltp
+            
+        target_idx = ltp - self.base_ltp
+
+        if target_idx < 0:
+            pad_size = abs(target_idx) + 50 
+            self.aggdf_buy = np.pad(self.aggdf_buy, (pad_size, 0), 'constant')
+            self.aggdf_sell = np.pad(self.aggdf_sell, (pad_size, 0), 'constant')
+            for k in ['buy', 'sell']:
+                self.highLow[k] = np.pad(self.highLow[k], ((0, 0), (pad_size, 0)), 'constant', constant_values=np.nan)
+                self.lowHigh[k] = np.pad(self.lowHigh[k], ((0, 0), (pad_size, 0)), 'constant', constant_values=np.nan)
+            self.base_ltp -= pad_size
+            self.WIDTH += pad_size
+            target_idx = ltp - self.base_ltp
+
+        elif target_idx >= self.WIDTH:
+            pad_size = (target_idx - self.WIDTH) + 50
+            self.aggdf_buy = np.pad(self.aggdf_buy, (0, pad_size), 'constant')
+            self.aggdf_sell = np.pad(self.aggdf_sell, (0, pad_size), 'constant')
+            for k in ['buy', 'sell']:
+                self.highLow[k] = np.pad(self.highLow[k], ((0, 0), (0, pad_size)), 'constant', constant_values=np.nan)
+                self.lowHigh[k] = np.pad(self.lowHigh[k], ((0, 0), (0, pad_size)), 'constant', constant_values=np.nan)
+            self.WIDTH += pad_size
+
+        return target_idx
+
+    def update_CNDM(self, agg_arr, direction):
+        mask = agg_arr > 0
+        if not np.any(mask):
+            return np.full_like(agg_arr, np.nan, dtype=float)
+
+        prices = np.arange(self.base_ltp, self.base_ltp + self.WIDTH)
+        aggby = np.ones_like(prices) if self.volOrQty else prices
+        
+        average = np.sum(agg_arr[mask] * aggby[mask]) / np.sum(mask)
+
+        valid_indices = np.where(mask)[0]
+        lower = valid_indices[0]
+        upper = valid_indices[-1]
+
+        trimmed_agg = agg_arr[lower:upper+1]
+        trimmed_aggby = aggby[lower:upper+1]
+        trimmed_signal = (trimmed_agg * trimmed_aggby) / average - 1.0
+
+        if direction == 'lowHigh':
+            result = trimmed_signal.cumsum()
+        else:
+            result = trimmed_signal[::-1].cumsum()[::-1]
+
+        full = np.full_like(agg_arr, np.nan, dtype=float)
+        full[lower:upper+1] = result
+        return full
+
+    def update_signals(self):
+        for k, agg_arr in [('buy', self.aggdf_buy), ('sell', self.aggdf_sell)]:
+            lh = self.update_CNDM(agg_arr, 'lowHigh')
+            hl = self.update_CNDM(agg_arr, 'highLow')
+
+            self.lowHigh[k][self.curr_time_idx] = lh
+            self.highLow[k][self.curr_time_idx] = hl
+
+            if np.any(~np.isnan(lh)):
+                lh_safe = np.nan_to_num(lh, nan=-np.inf)
+                top2_lh_idx = np.argsort(lh_safe)[-2:][::-1] 
+                self.lowHighMaxes[k].append([self.base_ltp + i for i in top2_lh_idx])
+            else:
+                self.lowHighMaxes[k].append([np.nan, np.nan])
+
+            if np.any(~np.isnan(hl)):
+                hl_safe = np.nan_to_num(hl, nan=-np.inf)
+                top2_hl_idx = np.argsort(hl_safe)[-2:][::-1]
+                self.highLowMaxes[k].append([self.base_ltp + i for i in top2_hl_idx])
+            else:
+                self.highLowMaxes[k].append([np.nan, np.nan])
+
+    def parse(self, message):
+        # Read by key, not by unpacking .values(): the cleaner's dict has grown
+        # spread/bid/ask fields, and a positional unpack would raise ValueError
+        # on every tick, which this except clause would swallow into a no-op.
+        try:
+            fields = self.cleaner.transform(message)
+            ltp, delta, ltp_type = fields['ltp'], fields['delta'], fields['ltp_type']
+        except (TypeError, AttributeError, KeyError):
+            return
+
+        ltp = float(ltp)
+        delta = float(delta)
+
+        self._ensure_time_bounds()
+        target_idx = self._ensure_price_bounds(ltp)
+
+        if ltp_type == 'b':
+            self.ltpdf[self.curr_time_idx] = [ltp, delta, 0, 0]
+            self.aggdf_buy[target_idx] += delta
+        elif ltp_type == 's':
+            self.ltpdf[self.curr_time_idx] = [ltp, 0, delta, 1]
+            self.aggdf_sell[target_idx] += delta
+
+        self.update_signals()
+        self.curr_time_idx += 1
