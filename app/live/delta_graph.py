@@ -15,6 +15,14 @@ QRectF = QtCore.QRectF
 COUNT_DROP_THRESHOLD = 10
 # A "spike" is |d1 of max| exceeding this many points (cross markers).
 SPIKE_THRESHOLD = 5.0
+# Trailing window (in ticks) for the rolling mode of the bias ribbon.
+BIAS_WINDOW = 200
+# |bias| in pos% points at which the ribbon reaches full opacity. Deliberately
+# small: cumulative bias on real data sits within a few points of zero.
+BIAS_ALPHA_SCALE = 5.0
+# Height in pixels of the bias ribbon strip under the combined plot.
+RIBBON_HEIGHT_PX = 34
+
 # One colour per signal: buys green shades, sells red shades.
 SPIKE_COLORS = [
     (  0, 150,   0),   # hl_buy  - dark green
@@ -56,17 +64,44 @@ def _first_order_diff(series):
     return np.diff(series, prepend=np.nan)
 
 
-def _cumulative_pos_pct(arr):
-    """Per-row cumulative (tick 0..row) % of valid cells that are >=0."""
+def _pos_pct(arr, window=None):
+    """
+    Per-row % of valid cells that are >=0. window=None accumulates from tick 0
+    (matching the *_pos% fields in mark stats); an int window counts only the
+    last `window` ticks, so the result tracks regime changes instead of
+    flattening out as the session grows.
+    """
     # ponytail: same math as backtest.export_mark_stats.cumulative_pos_neg_pct,
     # duplicated because importing that module pulls in config/S3 credentials.
     valid = ~np.isnan(arr)
     cum_valid = np.cumsum(valid.sum(axis=1).astype(float))
     cum_pos = np.cumsum((valid & (arr >= 0)).sum(axis=1).astype(float))
+    if window:
+        # Subtract the prefix that has fallen out of the trailing window.
+        pad = np.zeros(window)
+        cum_valid = cum_valid - np.concatenate([pad, cum_valid])[:cum_valid.size]
+        cum_pos = cum_pos - np.concatenate([pad, cum_pos])[:cum_pos.size]
     pct = np.full(cum_valid.shape, np.nan)
     has_data = cum_valid > 0
     pct[has_data] = 100.0 * cum_pos[has_data] / cum_valid[has_data]
     return pct
+
+
+def _bias_ribbon_rgba(bias):
+    """
+    (N,2,4) image for the bias ribbon: red where buy-vs-sell pos% bias is
+    negative, green where positive, alpha scaled by magnitude. NaN -> clear.
+
+    The image is two identical rows deep because pyqtgraph (0.13.7) silently
+    draws nothing for an ImageItem one row tall, whatever rect it is given.
+    """
+    rgba = np.zeros((bias.size, 1, 4), dtype=np.ubyte)
+    fin = np.isfinite(bias)
+    rgba[fin & (bias < 0), 0, :3] = (200, 0, 0)
+    rgba[fin & (bias >= 0), 0, :3] = (0, 150, 0)
+    strength = np.clip(np.abs(np.nan_to_num(bias)) / BIAS_ALPHA_SCALE, 0.0, 1.0)
+    rgba[fin, 0, 3] = (160 + 95 * strength[fin]).astype(np.ubyte)
+    return np.repeat(rgba, 2, axis=1)
 
 
 def _active_bounds_series(arr, min_idx, base_ltp):
@@ -125,7 +160,7 @@ def build_windows(sync_ranges=False):
     for w in (win_combined, win_components, win_stats, win_pct):
         w.setBackground("white")
 
-    p_combined = win_combined.addPlot(title="Combined State (0..15)")
+    p_combined = win_combined.addPlot(row=0, col=0, title="Combined State (0..15)")
     p_combined.showGrid(x=True, y=True, alpha=0.15)
     p_combined.setLabel("left", "LTP")
     p_combined.setLabel("bottom", "Tick Index")
@@ -134,6 +169,22 @@ def build_windows(sync_ranges=False):
     img_combined.setLookupTable(FULL_LUT)
     p_combined.addItem(img_combined)
     ltp_line_combined = p_combined.plot([], [], pen=pg.mkPen(color=(0, 0, 255), width=2))
+
+    # Buy-vs-sell pos% bias, as its own strip under the price plot. It lives in
+    # a separate plot rather than overlaid on p_combined because the heatmap is
+    # itself red/green, leaving an overlaid ribbon nothing to contrast against.
+    p_ribbon = win_combined.addPlot(row=1, col=0)
+    p_ribbon.setMaximumHeight(RIBBON_HEIGHT_PX)
+    p_ribbon.setXLink(p_combined)
+    p_ribbon.setMouseEnabled(x=True, y=False)
+    p_ribbon.hideAxis("left")
+    # Both axes off: the strip is 100% ribbon, and p_combined already carries
+    # the tick scale it is x-linked to.
+    p_ribbon.hideAxis("bottom")
+    p_ribbon.setYRange(0, 1, padding=0)
+    p_ribbon.getViewBox().setBackgroundColor("w")
+    img_bias = pg.ImageItem()
+    p_ribbon.addItem(img_bias)
 
     comp_plots, comp_imgs, comp_ltps = [], [], []
     stat_plots, signal_plots = [], []
@@ -240,6 +291,19 @@ def build_windows(sync_ranges=False):
     toggle_btn.setFixedWidth(120)
     toggle_btn.show()
 
+    bias_rolling = [False]
+
+    bias_btn = QtWidgets.QPushButton("Bias: cumulative")
+    bias_btn.setCheckable(True)
+
+    def _toggle_bias(checked):
+        bias_rolling[0] = checked
+        bias_btn.setText(f"Bias: rolling {BIAS_WINDOW}" if checked else "Bias: cumulative")
+
+    bias_btn.toggled.connect(_toggle_bias)
+    bias_btn.setFixedWidth(160)
+    bias_btn.show()
+
     w = {
         "app": app,
         "windows": (win_combined, win_components, win_stats, win_pct),
@@ -256,12 +320,16 @@ def build_windows(sync_ranges=False):
         "drop_scatters": drop_scatters,
         "max_scatters": max_scatters,
         "signal_visible": signal_visible,
+        "img_bias": img_bias,
+        "p_ribbon": p_ribbon,
+        "bias_rolling": bias_rolling,
         "bias_line": bias_line,
         "skew_buy_line": skew_buy_line,
         "skew_sell_line": skew_sell_line,
         "skew_legend": skew_legend,
-        # held so Qt doesn't garbage-collect the button and its connection
+        # held so Qt doesn't garbage-collect the buttons and their connections
         "toggle_btn": toggle_btn,
+        "bias_btn": bias_btn,
     }
 
     if sync_ranges:
@@ -383,7 +451,7 @@ def render(instance, w):
 
     # Cumulative pos% differentials. arrays order is hl_buy, lh_buy, hl_sell, lh_sell.
     pct_hl_buy, pct_lh_buy, pct_hl_sell, pct_lh_sell = (
-        _cumulative_pos_pct(a.astype(float)) for a in arrays
+        _pos_pct(a.astype(float)) for a in arrays
     )
     bias = (pct_hl_buy + pct_lh_buy) - (pct_hl_sell + pct_lh_sell)
     skew_buy  = pct_hl_buy  - pct_lh_buy
@@ -393,6 +461,15 @@ def render(instance, w):
                         ("skew_sell_line", skew_sell)):
         fin = np.isfinite(series)
         w[key].setData(row_x[fin], series[fin])
+
+    # Ribbon along the bottom of the price plot: sign and strength of the bias.
+    if w["bias_rolling"][0]:
+        roll = [_pos_pct(a.astype(float), window=BIAS_WINDOW) for a in arrays]
+        ribbon_bias = (roll[0] + roll[1]) - (roll[2] + roll[3])
+    else:
+        ribbon_bias = bias
+    w["img_bias"].setImage(_bias_ribbon_rgba(ribbon_bias), autoLevels=False)
+    w["img_bias"].setRect(QRectF(0, 0, rows_used, 1))
 
 
 def delta_graph(instance):
