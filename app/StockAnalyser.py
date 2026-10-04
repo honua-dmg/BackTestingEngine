@@ -2,43 +2,56 @@ import pandas as pd
 import numpy as np
 from cleanData import Algo1
 import pyqtgraph as pg
-import datetime as dt
+
+def sigmoid(x):
+    #return x
+    return 1 / (1 + np.exp(-x/2))
+
 class Cumulative_Support():
     def __init__(self,vol=True):
+        
         self.aggDf = pd.DataFrame(columns=['buy-vol', 'sell-vol'])
         self.aggDf.index.name = 'ltp' # Name the index for clarity
-        self.ltpDf = pd.DataFrame(columns=['time', 'ltp', 'buy-vol', 'sell-vol', 'type'])
-
-   
-
- 
+        self.ltpDf = pd.DataFrame(columns=['time', 'ltp', 'buy-vol', 'sell-vol', 'type','spread','bid','ask'])
         self.lowHighdf = [pd.DataFrame(),pd.DataFrame()]
         self.highLowdf = [pd.DataFrame(),pd.DataFrame()]
-        self.combineddf = [pd.DataFrame(dtype='Int64'),pd.DataFrame(dtype='Int64')]
-        self.total = pd.DataFrame(dtype='Int64')
+        self.combineddf = [pd.DataFrame(),pd.DataFrame()]
+        self.total = pd.DataFrame()
+
         self.lowHighMaxes = [pd.DataFrame(columns=['second','first']),pd.DataFrame(columns=['second','first'])]
         self.HighlowMaxes = [pd.DataFrame(columns=['second','first']),pd.DataFrame(columns=['second','first'])]
-        self.volOrQty = vol
 
+        self.volOrQty = vol
         self.voldiff_buy = pd.DataFrame()
         self.voldiff_sell = pd.DataFrame()
+        self.voldiff_300 = pd.DataFrame()
 
         self.cleaner = Algo1()
 
-        self.normalised = []
+        #peak variables:
+        self.Peakstartthreshold = 10 # this'll be variable. 
+        self.Peaksizethreshold = 60
+        self.ridingPeak_buy = False
+        self.ridingPeak_sell = False
+        self.buyPeak_start = (np.nan,np.nan)
+        self.sellPeak_start = (np.nan,np.nan)
+        self.peaks_buy = [] #(x,y)
+        self.peaks_sell =[]
+
     def update_volDiff(self,size,vol_df,vol_type='buy-vol'):
         
         if self.ltpDf.size<size:
             update = np.nan
         else:
             #update = self.ltpDf['buy-vol'][-size:].sum() - self.ltpDf['sell-vol'][-size:].sum()
-            update = self.ltpDf[vol_type].ewm(span=70).mean().iloc[-1]
+            update = self.ltpDf[vol_type].ewm(span=50).mean().iloc[-1]
         
 
         vol_df.loc[self.ltpDf.index[-1],0] = update
         
+    
 
-    def update_df(self,last_traded_time,ltp:int,delta:int,type:str):
+    def update_df(self,last_traded_time,**kwargs):
         """ 
         updates the aggregrated dataframe and the ltp dataframe. 
 
@@ -51,7 +64,8 @@ class Cumulative_Support():
         returns:
             None
         """
-        ltp = int(ltp)
+
+        ltp = int(kwargs['ltp'])
         if self.aggDf.empty:
             min_ltp = ltp
             max_ltp = ltp
@@ -68,10 +82,10 @@ class Cumulative_Support():
         # Reindex the DataFrame to the desired range
         # fill_value=0 will initialize newly introduced rows with 0
         self.aggDf = self.aggDf.reindex(desired_index, fill_value=0)
-        if type == 's':
-            self.aggDf.loc[ltp, 'sell-vol'] += delta
+        if kwargs['ltp_type'] == 's':
+            self.aggDf.loc[ltp, 'sell-vol'] += kwargs['delta']
         else: # type == 'b'
-            self.aggDf.loc[ltp, 'buy-vol'] += delta
+            self.aggDf.loc[ltp, 'buy-vol'] += kwargs['delta']
 
 
         # update ltp data stream. 
@@ -80,38 +94,67 @@ class Cumulative_Support():
                         'time'      :[last_traded_time],
                         'ltp'       :[ltp],
                         'buy-vol'   :[0],
-                        'sell-vol'  :[delta],
+                        'sell-vol'  :[kwargs['delta']],
+                        'spread'    :[kwargs['spread']],
+                        'bid'       :[kwargs['bid']],
+                        'ask'       :[kwargs['ask']]
                         #'diff'      : diff
-            } if type=='s' else  {
+            } if kwargs['ltp_type']=='s' else  {
                         'time'      :[last_traded_time],
                         'ltp'       :[ltp],
-                        'buy-vol'   :[delta],
+                        'buy-vol'   :[kwargs['delta']],
                         'sell-vol'  :[0],
+                        'spread'    :[kwargs['spread']],
+                        'bid'       :[kwargs['bid']],
+                        'ask'       :[kwargs['ask']]
                         #'diff'      : diff
             }
         #print(f'data added: {new_record} type ltp: {self.ltpDf["ltp"].dtype}')
 
-        self.ltpDf = pd.concat([self.ltpDf, pd.DataFrame(new_record)], ignore_index=True)
+        new_df = pd.DataFrame(new_record)
+        if not new_df.empty:
+            self.ltpDf = pd.concat([self.ltpDf, new_df], ignore_index=True)
         #print(f'ltpDf shape: {self.ltpDf.shape} ltpDf columns: {self.ltpDf.columns} ltpDf index: {self.ltpDf.index}')
         self.update_volDiff(50,self.voldiff_buy,'buy-vol')
         self.update_volDiff(20,self.voldiff_sell,'sell-vol')
         #self.update_volDiff(300,self.voldiff_300,'buy-vol')
       
     
-    def signal(self,):
+    def signal(self):
         """
         normalises and finds the cumulative means of the buy volumes.
         """
         types=['buy','sell']
+        combineBuySell = []
         # if the 
         for index in range(2):
             if len(self.aggDf[self.aggDf[f'{types[index]}-vol']>0]) ==0:
-                pd.concat([self.lowHighMaxes[index],pd.DataFrame([[np.nan] * len(self.lowHighMaxes[index].columns)],columns=self.lowHighMaxes[index].columns)])
-                pd.concat([self.HighlowMaxes[index],pd.DataFrame([[np.nan] * len(self.lowHighMaxes[index].columns)],columns=self.HighlowMaxes[index].columns)])
-                self.lowHighdf[index] = pd.concat(axis=1,objs=[self.lowHighdf[index],pd.DataFrame([[np.nan]], index=[self.ltpDf.index[-1]])]).reindex(self.aggDf.index)
-                self.highLowdf[index] = pd.concat(axis=1,objs=[self.highLowdf[index],pd.DataFrame([[np.nan]], index=[self.ltpDf.index[-1]])]).reindex(self.aggDf.index)
-                self.combineddf[index] = pd.concat(axis=1,objs=[self.combineddf[index],pd.DataFrame([[np.nan]], index=[self.ltpDf.index[-1]])]).reindex(self.aggDf.index)
-                return
+                pd.concat(
+                    [self.lowHighMaxes[index],
+                     pd.DataFrame([[np.nan] * len(self.lowHighMaxes[index].columns)],
+                                    columns=self.lowHighMaxes[index].columns)]
+                    )
+                pd.concat(
+                    [self.HighlowMaxes[index],
+                     pd.DataFrame([[np.nan] * len(self.lowHighMaxes[index].columns)],
+                                  columns=self.HighlowMaxes[index].columns)])
+                """               
+                self.lowHighdf[index] = pd.concat(axis=1,
+                                                  objs=[self.lowHighdf[index],
+                                                        pd.DataFrame([[np.nan]], 
+                                                                     index=[self.ltpDf.index[-1]])]
+                                                 ).reindex(self.aggDf.index)
+                self.highLowdf[index] = pd.concat(axis=1,
+                                                  objs=[self.highLowdf[index],
+                                                        pd.DataFrame([[np.nan]], index=[self.ltpDf.index[-1]])]
+                                                ).reindex(self.aggDf.index)
+                """
+                self.combineddf[index] = pd.concat(axis=1,
+                                                   objs=[self.combineddf[index],
+                                                         pd.DataFrame([[np.nan]], index=[self.ltpDf.index[-1]])]
+                                                ).reindex(self.aggDf.index)
+
+                continue
 
             if self.volOrQty:
                 self.aggby = 1
@@ -128,12 +171,36 @@ class Cumulative_Support():
             # we need to append the top 2 of each. 
             self.lowHighMaxes[index].loc[self.ltpDf.index[-1],['second','first']] = lowHigh[lowHigh.columns[0]].nlargest(2).index.to_list() # idk if the to_list part is necessary
             self.HighlowMaxes[index].loc[self.ltpDf.index[-1],['second','first']] = highLow[highLow.columns[0]].nlargest(2).index.to_list()
+
+            # we need to append lowHigh and Highlow to self.LowHighdf and self.HighLowdf
+            #self.lowHighdf[index] = pd.concat(axis=1,objs=[self.lowHighdf[index],lowHigh.map(lambda x: 0 if x<0 else 1)]).reindex(self.aggDf.index)
+            #self.highLowdf[index] = pd.concat(axis=1,objs=[self.highLowdf[index],highLow.map(lambda x: 0 if x<0 else 1)]).reindex(self.aggDf.index)
+            
+            #self.lowHighdf[index] = pd.concat(axis=1,objs=[self.lowHighdf[index],lowHigh.apply(sigmoid)]).reindex(self.aggDf.index)
+            #self.highLowdf[index] = pd.concat(axis=1,objs=[self.highLowdf[index],highLow.apply(sigmoid)]).reindex(self.aggDf.index)
             combined = lowHigh.map(lambda x: 0 if x<0 else 1)+2*highLow.map(lambda x: 0 if x<0 else 1)
-            #combineBuySell.append(combined)
+        
+            #combined = lowHigh.apply(sigmoid)+2*highLow.apply(sigmoid)
+            combineBuySell.append(combined)
             self.combineddf[index] =pd.concat(
                         axis=1,
                         objs=[self.combineddf[index],combined]
                         ).reindex(self.aggDf.index)
+            #print(f"lowHighdf shape: {self.lowHighdf.shape} highLowdf shape: {self.highLowdf.shape}")
+        
+        if len(self.aggDf) <2:
+            self.total= pd.concat(axis=1,
+                                    objs=[self.total,
+                                            pd.DataFrame([[np.nan]], index=[self.ltpDf.index[-1]],columns=['vol'])]
+                                    ).reindex(self.aggDf.index)
+        elif len(combineBuySell)==2:
+            total_combined = combineBuySell[0]+2*combineBuySell[1]
+            self.total =pd.concat(
+                            axis=1,
+                            objs=[self.total,total_combined]
+                            ).reindex(self.aggDf.index)
+        
+
 
             # we need to append lowHigh and Highlow to self.LowHighdf and self.HighLowdf
             #self.lowHighdf[index] = pd.concat(axis=1,objs=[self.lowHighdf[index],lowHigh.map(lambda x: 0 if x<0 else 1)]).reindex(self.aggDf.index)
@@ -146,17 +213,23 @@ class Cumulative_Support():
                                             pd.DataFrame([[np.nan]], index=[self.ltpDf.index[-1]],columns=['vol'])]
                                     ).reindex(self.aggDf.index)
 
-
-
-
-    def parse(self,message):
         try:
-            _,ltp,delta,ltp_type = self.cleaner.transform(message).values()
-        except (TypeError,AttributeError):
+            kwargs = self.cleaner.transform(message)
+            self.ltp= kwargs['ltp']
+            self.delta = kwargs['delta']
+            self.ltp_type = kwargs['ltp_type']
+            self.spread = kwargs['spread']
+
+        except (TypeError,AttributeError) as e:
+            #print(f'we got an error bitch:{e}')
             return
         #print(type(ltp),type(delta),type(ltp_type))
-        self.update_df(message['timestamp'],ltp,delta,ltp_type)  
+        self.update_df(message['timestamp'],**kwargs)  
         self.signal()
+        #print(f'updated signal for {ltp} ')
+        
+
+    
 
 
 # We'll keep initial allocations relatively small to save memory, 
@@ -277,9 +350,13 @@ class Delta_analysis():
                 self.highLowMaxes[k].append([np.nan, np.nan])
 
     def parse(self, message):
+        # Read by key, not by unpacking .values(): the cleaner's dict has grown
+        # spread/bid/ask fields, and a positional unpack would raise ValueError
+        # on every tick, which this except clause would swallow into a no-op.
         try:
-            _, ltp, delta, ltp_type = self.cleaner.transform(message).values()
-        except (TypeError, AttributeError, ValueError):
+            fields = self.cleaner.transform(message)
+            ltp, delta, ltp_type = fields['ltp'], fields['delta'], fields['ltp_type']
+        except (TypeError, AttributeError, KeyError):
             return
 
         ltp = float(ltp)

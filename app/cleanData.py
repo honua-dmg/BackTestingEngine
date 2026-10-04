@@ -40,6 +40,7 @@ class Algo1(CleanData):
         #figure out the type:
         buy_prices = np.array([np.float32(message[f'buy_price_{i}']) for i in range(1,6)])
         sell_prices = np.array([np.float32(message[f'sell_price_{i}']) for i in range(1,6)])
+
         ltp = np.float32(message['last_price'])
         buy_sq = float(np.dot(buy_prices-ltp, (buy_prices-ltp).T))
         sell_sq = float(np.dot(sell_prices-ltp, (sell_prices-ltp).T))
@@ -50,9 +51,11 @@ class Algo1(CleanData):
         else:
             ltp_type = 'b' if buy_sq < sell_sq else 's'
         self.last_ltp = ltp
-        #print(f"delta_vol: {delta_vol}, ltp: {ltp}, ltp_type: {ltp_type}")
+        bid, ask = max(buy_prices), min(sell_prices)
         return {'time': message['timestamp'],
-                'ltp':ltp,
-                'delta':delta_vol,
-                'ltp_type':ltp_type}
-    
+                'ltp': ltp,
+                'delta': delta_vol,
+                'ltp_type': ltp_type,
+                'spread': bid - ask,
+                'bid': bid,
+                'ask': ask}

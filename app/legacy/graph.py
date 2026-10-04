@@ -22,9 +22,10 @@ def graph(instance):
         return img"""
         
         lut = np.array([
-            #   R,   G,   B,   A
-            [255,   0,   0, 170],  # 0: Red           (0,0)
-            [ 57, 255,  20, 170],  # 15: Neon Green   (3,3)
+            [254,   79,   92,   200],  # 0: red (0,0)
+            [198, 158,   81,   200],  # 1: brown   (0,1)
+            [146, 194,   79,   200],  # 2: green (1,0)
+            [7,   235, 59,   200],  # 3: neon green  (1,1)
         ], dtype=np.ubyte)
 
         # Create the ImageItem
@@ -109,9 +110,9 @@ def graph(instance):
         #update voll_diff:
         ##
         
-        x,y = getXY(instance.voldiff_50[0])
+        x,y = getXY(instance.voldiff_buy[0])
         instance.vol_diff_50.setData(x, y)
-        x,y = getXY(instance.voldiff_20[0])
+        x,y = getXY(instance.voldiff_sell[0])
         instance.vol_diff_20.setData(x, y)
 
         x = instance.ltpDf.index.to_numpy()
@@ -123,7 +124,7 @@ def graph(instance):
 
 
         """
-        x,y = getXY(instance.voldiff_200[0])
+        x,y = getXY(instance.voldiff_sell0[0])
         instance.vol_diff_200.setData(x, y)
         x,y = getXY(instance.voldiff_300[0])
         instance.vol_diff_300.setData(x, y)
@@ -178,8 +179,8 @@ def graph(instance):
     instance.line_lower_2_sell = addlinePlot(plot_buy, linewidth=2, data=instance.HighlowMaxes[1]['second'], name='Sell HL Min', color='#fff1b8')
 
     #voll_diff:
-    instance.vol_diff_50 = addlinePlot(plot_diff, linewidth=4, data=instance.voldiff_50, name='VolDiff_50', color="#a99344")
-    instance.vol_diff_20 = addlinePlot(plot_diff, linewidth=4, data=instance.voldiff_20, name='VolDiff_20', color='#097969')
+    instance.vol_diff_50 = addlinePlot(plot_diff, linewidth=4, data=instance.voldiff_buy, name='VolDiff_buy', color='#fdd750')
+    instance.vol_diff_20 = addlinePlot(plot_diff, linewidth=4, data=instance.voldiff_sell, name='VolDiff_sell', color='#097969')
     #instance.vol_diff_300 = addlinePlot(plot_diff, linewidth=4, data=instance.voldiff_300, name='VolDiff_300', color=(0, 0, 255))
 
     # line plots
@@ -208,4 +209,40 @@ def graph(instance):
 
 
     
+if __name__=='__main__':
+    import matplotlib.pyplot as plt
+    import numpy as np
 
+    import matplotlib.animation as animation
+
+
+    class PauseAnimation:
+        def __init__(self):
+            fig, ax = plt.subplots()
+            ax.set_title('Click to pause/resume the animation')
+            x = np.linspace(-0.1, 0.1, 1000)
+
+            # Start with a normal distribution
+            self.n0 = (1.0 / ((4 * np.pi * 2e-4 * 0.1) ** 0.5)
+                    * np.exp(-x ** 2 / (4 * 2e-4 * 0.1)))
+            self.p, = ax.plot(x, self.n0)
+
+            self.animation = animation.FuncAnimation(
+                fig, self.update, frames=200, interval=50, blit=True)
+            self.paused = False
+
+            fig.canvas.mpl_connect('button_press_event', self.toggle_pause)
+
+        def toggle_pause(self, *args, **kwargs):
+            if self.paused:
+                self.animation.resume()
+            else:
+                self.animation.pause()
+            self.paused = not self.paused
+
+        def update(self, i):
+            self.n0 += i / 100 % 5
+            self.p.set_ydata(self.n0 % 20)
+            return (self.p,)
+    pa = PauseAnimation()
+    plt.show()

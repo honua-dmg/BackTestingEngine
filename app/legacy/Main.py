@@ -27,9 +27,7 @@ def download_file():
                 f.write(response['Body'].read())
             print(f"[MAIN] Downloaded {EXCHANGE}:{STOCKS[0]} for {SIMULATION_DATE}")
         except Exception as e:
-            raise Exception(f"file not found, choose another date. {e}")
-    else:
-        print('already present locally')
+            raise Exception(f"file not found,choose another date.\n {e}")
 
 def begin():
     """
@@ -70,6 +68,7 @@ def run():
     except KeyboardInterrupt:
         logging.info(" Keyboard Interrupt received. Exiting.")
         r.set('end', 'true')
+        
         time.sleep(2)
         logging.info(" Flushing redis")
         r.flushall()

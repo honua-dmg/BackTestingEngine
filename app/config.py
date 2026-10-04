@@ -3,8 +3,8 @@ import os
 import dotenv
 import json
 import boto3
-
-# Try Docker path first, then local path
+# Try Docker path first, then local path. Not a bare '.env': entry points run
+# as `python -m ...` from app/, so a relative path resolves to nothing.
 ENVLOC = '/app/.env' if os.path.exists('/app/.env') else os.path.join(os.path.dirname(__file__), '../.env')
 dotenv.load_dotenv(ENVLOC)
 # Centralized Redis connection
@@ -32,7 +32,7 @@ s3 = boto3.client(
 
 TEST = "stocks"
 FILEPATH = os.getenv("FILEPATH")
-
+SIMULATION_DATE = "2025-07-03"
 
 CONFIG_DIR = os.path.dirname(os.path.abspath(__file__))
 STOCKS = list(json.load(open(os.path.join(CONFIG_DIR, "stocks.json")))[TEST].keys())
@@ -45,7 +45,7 @@ DECTECTION_TYPE = 'buy'
 GRAPH = f"{EXCHANGE}:{STOCKS[0]}"
 VOLUME = True
 
-
 if __name__ == "__main__":
-    print(STOCKS)
-    print(EXCHANGE)
+    print("[CONFIG] Loading config")
+    print(os.getenv('DIGITALOCEAN_ENDPOINT'))
+    
