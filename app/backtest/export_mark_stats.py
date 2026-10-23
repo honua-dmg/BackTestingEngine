@@ -143,12 +143,12 @@ def build_mark_stats_for_date(date_str):
     return compute_mark_stats(instance)
 
 
-def main():
+def main(start_date=START_DATE, end_date=None):
+    end_date = end_date or dt.date.today()
     os.makedirs(os.path.dirname(OUTPUT_CSV), exist_ok=True)
     wrote_header = os.path.exists(OUTPUT_CSV)
 
-    current = START_DATE
-    end_date = dt.date.today()
+    current = start_date
     while current <= end_date:
         date_str = current.isoformat()
 

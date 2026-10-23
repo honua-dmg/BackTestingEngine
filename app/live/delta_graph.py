@@ -50,6 +50,17 @@ def _active_price_bounds(aggdf_buy, aggdf_sell):
     return lo, hi
 
 
+def _fit_rows(img):
+    """
+    Keep every k-th row so the image stays under Qt's 32767px limit. Past it,
+    pyqtgraph forces autoDownsample, which averages our uint8 category codes
+    into floats (meaningless colours, and a "levels argument is required" crash).
+    Rows are ticks and every image gets a setRect, so the axes are unaffected.
+    """
+    k = -(-img.shape[0] // 32767)
+    return img[::k] if k > 1 else img
+
+
 def _make_component_map(arr, true_code):
     out = np.zeros_like(arr, dtype=np.uint8)
     valid = ~np.isnan(arr)
@@ -231,6 +242,7 @@ def build_windows(sync_ranges=False):
     p_bias.showGrid(x=True, y=True, alpha=0.15)
     p_bias.setLabel("left", "pos% diff")
     p_bias.setLabel("bottom", "Tick Index")
+    p_bias.setXLink(p_combined)
     p_bias.addLine(y=0, pen=pg.mkPen(color=(150, 150, 150), width=1, style=QtCore.Qt.PenStyle.DashLine))
     bias_line = p_bias.plot([], [], pen=pg.mkPen(color=(0, 0, 255), width=2), name="buy - sell")
 
@@ -392,7 +404,7 @@ def render(instance, w):
     max_ltp = float(instance.base_ltp + max_idx)
     rect = QRectF(0, min_ltp, rows_used, max(1.0, max_ltp - min_ltp + 1.0))
 
-    w["img_combined"].setImage(heatmap, autoLevels=False)
+    w["img_combined"].setImage(_fit_rows(heatmap), autoLevels=False)
     w["img_combined"].setRect(rect)
 
     ltp_vals  = instance.ltpdf[:rows_used, 0].astype(float)
@@ -407,7 +419,7 @@ def render(instance, w):
     row_x = np.arange(rows_used, dtype=float)
 
     for i, (arr, code) in enumerate(zip(arrays, codes)):
-        w["comp_imgs"][i].setImage(_make_component_map(arr, code), autoLevels=False)
+        w["comp_imgs"][i].setImage(_fit_rows(_make_component_map(arr, code)), autoLevels=False)
         w["comp_imgs"][i].setRect(rect)
         w["comp_ltps"][i].setData(x_ltp, y_ltp)
 
@@ -468,7 +480,7 @@ def render(instance, w):
         ribbon_bias = (roll[0] + roll[1]) - (roll[2] + roll[3])
     else:
         ribbon_bias = bias
-    w["img_bias"].setImage(_bias_ribbon_rgba(ribbon_bias), autoLevels=False)
+    w["img_bias"].setImage(_fit_rows(_bias_ribbon_rgba(ribbon_bias)), autoLevels=False)
     w["img_bias"].setRect(QRectF(0, 0, rows_used, 1))
 
 
