@@ -409,6 +409,21 @@ def _link_all_ranges(w):
     w["_range_sync"] = _sync  # keep the callback alive
 
 
+def components(instance):
+    rows_used = int(instance.curr_time_idx)
+    if rows_used < 1:
+        return
+
+    min_idx, max_idx = _active_price_bounds(instance.aggdf_buy, instance.aggdf_sell)
+    col_slice = slice(min_idx, max_idx + 1)
+
+    lh_buy  = instance.lowHigh['buy'][:rows_used,  col_slice]
+    hl_buy  = instance.highLow['buy'][:rows_used,  col_slice]
+    lh_sell = instance.lowHigh['sell'][:rows_used, col_slice]
+    hl_sell = instance.highLow['sell'][:rows_used, col_slice]
+
+    return (lh_buy,hl_buy,lh_sell,hl_sell)
+
 def _render_component(w, i, arr_f, code, rect, x_ltp, y_ltp, row_x, min_idx, base_ltp):
     """Component heatmap, boundary lines and stats plots for one signal."""
     w["comp_imgs"][i].setImage(_fit_rows(_make_component_map(arr_f, code)), autoLevels=False)
