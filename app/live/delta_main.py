@@ -22,7 +22,7 @@ def run():
 
     instance = Delta_analysis()
     # Second instance: last few trading days + today, for the multi-day graph.
-    multiday, seed_thread = start_multiday()
+    multiday, seed_thread = start_multiday(lookback='wednesday')
     producer_thread = start_producer(stock)
     consumer_thread = start_consumer(stock, instance, extras=[multiday])
     dashboard_thread = start_dashboard(stock)

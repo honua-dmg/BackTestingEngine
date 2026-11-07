@@ -25,6 +25,7 @@ LOOKBACK = "tuesday"
 MAX_CALENDAR_LOOKBACK = 30
 
 TUESDAY = 1  # date.weekday()
+WEDNESDAY = 2
 
 
 def lookback_dates(today, lookback, has_data):
@@ -38,7 +39,12 @@ def lookback_dates(today, lookback, has_data):
         candidates = [today - dt.timedelta(days=i) for i in range(back, 0, -1)]
         return [d.isoformat() for d in candidates
                 if d.weekday() < 5 and has_data(d.isoformat())]
-
+    
+    if lookback == "wednesday":
+        back = (today.weekday() - WEDNESDAY) % 7 or 7
+        candidates = [today - dt.timedelta(days=i) for i in range(back, 0, -1)]
+        return [d.isoformat() for d in candidates
+                if d.weekday() < 5 and has_data(d.isoformat())]
     n = int(lookback)
     picked = []
     for i in range(1, MAX_CALENDAR_LOOKBACK + 1):

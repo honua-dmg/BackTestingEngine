@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Skill(brainstorming)",
+      "Bash(mkdir *)",
+      "Skill(writing-plans)",
+      "Bash(cp *)",
+      "Skill(subagent-driven-development)",
+      "Bash(python3 *)",
+      "Skill(test-driven-development)",
+      "Skill(finishing-a-development-branch)",
+      "Bash(jupyter nbconvert *)",
+      "Bash(.venv/bin/pip freeze *)"
+    ]
+  }
+}
