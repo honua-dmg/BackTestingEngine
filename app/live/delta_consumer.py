@@ -36,7 +36,16 @@ def _deserialize(tick: dict) -> dict:
     return result
 
 
-def _consumer_loop(stock: str, instance:Delta_analysis) -> None:
+def _feed_extras(extras, tick: dict) -> None:
+    # Extra instances (e.g. the multi-day one) must never break the daily feed.
+    for extra in extras:
+        try:
+            extra.parse(tick)
+        except Exception as e:
+            logging.error(f"[CONSUMER] extra instance tick error: {e}")
+
+
+def _consumer_loop(stock: str, instance:Delta_analysis, extras=()) -> None:
     group = stock
     consumer = stock
     detector = MarkDetector()
@@ -51,9 +60,11 @@ def _consumer_loop(stock: str, instance:Delta_analysis) -> None:
                                      min_idle_time=0, start_id='0-0')
         for msg_id, tick in claimed:
             try:
-                instance.parse(_deserialize(tick))
+                parsed = _deserialize(tick)
+                instance.parse(parsed)
                 r.xack(stock, group, msg_id)
                 _publish_marks(stock, detector, instance)
+                _feed_extras(extras, parsed)
             except Exception as e:
                 logging.error(f"[CONSUMER] tick error: {e}")
 
@@ -63,17 +74,20 @@ def _consumer_loop(stock: str, instance:Delta_analysis) -> None:
             for _, messages in new:
                 for msg_id, tick in messages:
                     try:
-                        instance.parse(_deserialize(tick))
+                        parsed = _deserialize(tick)
+                        instance.parse(parsed)
                         r.xack(stock, group, msg_id)
                         _publish_marks(stock, detector, instance)
+                        _feed_extras(extras, parsed)
                     except Exception as e:
                         logging.error(f"[CONSUMER] tick error: {e}")
 
     logging.info(f"[CONSUMER] stopped for {stock}")
 
 
-def start_consumer(stock: str, instance) -> threading.Thread:
-    t = threading.Thread(target=_consumer_loop, args=(stock, instance),
+def start_consumer(stock: str, instance, extras=()) -> threading.Thread:
+    """extras: more objects with .parse(tick) fed the same ticks after instance."""
+    t = threading.Thread(target=_consumer_loop, args=(stock, instance, tuple(extras)),
                          name="DeltaConsumer", daemon=True)
     t.start()
     return t

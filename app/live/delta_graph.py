@@ -22,6 +22,9 @@ BIAS_WINDOW = 200
 BIAS_ALPHA_SCALE = 5.0
 # Height in pixels of the bias ribbon strip under the combined plot.
 RIBBON_HEIGHT_PX = 34
+# Refresh interval of the multi-day graph. Slower than the daily one: each frame
+# recomputes days of history on the Qt thread, which would stall the daily graph.
+MULTIDAY_REFRESH_MS = 2000
 
 # One colour per signal: buys green shades, sells red shades.
 SPIKE_COLORS = [
@@ -156,47 +159,8 @@ FULL_LUT = np.zeros((256, 4), dtype=np.ubyte)
 FULL_LUT[:17] = BASE_LUT
 
 
-def build_windows(sync_ranges=False):
-    """
-    Build the four-window Qt scene and return handles to everything render()
-    writes into. sync_ranges links pan/zoom across all windows (the notebook's
-    behaviour); the live graph leaves it off and only links the component plots.
-    """
-    app = pg.mkQApp("Delta Analysis")
-
-    win_combined   = pg.GraphicsLayoutWidget(title="Combined")
-    win_components = pg.GraphicsLayoutWidget(title="Components")
-    win_stats      = pg.GraphicsLayoutWidget(title="Stats")
-    win_pct        = pg.GraphicsLayoutWidget(title="Pos%")
-    for w in (win_combined, win_components, win_stats, win_pct):
-        w.setBackground("white")
-
-    p_combined = win_combined.addPlot(row=0, col=0, title="Combined State (0..15)")
-    p_combined.showGrid(x=True, y=True, alpha=0.15)
-    p_combined.setLabel("left", "LTP")
-    p_combined.setLabel("bottom", "Tick Index")
-
-    img_combined = pg.ImageItem()
-    img_combined.setLookupTable(FULL_LUT)
-    p_combined.addItem(img_combined)
-    ltp_line_combined = p_combined.plot([], [], pen=pg.mkPen(color=(0, 0, 255), width=2))
-
-    # Buy-vs-sell pos% bias, as its own strip under the price plot. It lives in
-    # a separate plot rather than overlaid on p_combined because the heatmap is
-    # itself red/green, leaving an overlaid ribbon nothing to contrast against.
-    p_ribbon = win_combined.addPlot(row=1, col=0)
-    p_ribbon.setMaximumHeight(RIBBON_HEIGHT_PX)
-    p_ribbon.setXLink(p_combined)
-    p_ribbon.setMouseEnabled(x=True, y=False)
-    p_ribbon.hideAxis("left")
-    # Both axes off: the strip is 100% ribbon, and p_combined already carries
-    # the tick scale it is x-linked to.
-    p_ribbon.hideAxis("bottom")
-    p_ribbon.setYRange(0, 1, padding=0)
-    p_ribbon.getViewBox().setBackgroundColor("w")
-    img_bias = pg.ImageItem()
-    p_ribbon.addItem(img_bias)
-
+def _build_detail_windows(win_components, win_stats, win_pct, p_combined):
+    """Component, stats and pos% windows: everything but the combined plot."""
     comp_plots, comp_imgs, comp_ltps = [], [], []
     stat_plots, signal_plots = [], []
     min_lines, max_lines = [], []
@@ -256,6 +220,72 @@ def build_windows(sync_ranges=False):
     skew_buy_line  = p_skew.plot([], [], pen=pg.mkPen(color=(0, 150, 0), width=2), name="hl_buy - lh_buy")
     skew_sell_line = p_skew.plot([], [], pen=pg.mkPen(color=(150, 0, 0), width=2), name="hl_sell - lh_sell")
 
+    master = comp_plots[0]
+    for p in comp_plots[1:]:
+        p.setXLink(master)
+        p.setYLink(master)
+
+    return (comp_plots, comp_imgs, comp_ltps, stat_plots, signal_plots, min_lines, max_lines,
+            bias_line, skew_buy_line, skew_sell_line, skew_legend)
+
+
+def build_windows(sync_ranges=False, combined_only=False, title="Combined", bias_rolling=None):
+    """
+    Build the four-window Qt scene and return handles to everything render()
+    writes into. sync_ranges links pan/zoom across all windows (the notebook's
+    behaviour); the live graph leaves it off and only links the component plots.
+
+    combined_only builds just the combined window (the multi-day graph).
+    bias_rolling lets a scene share another scene's rolling/cumulative toggle.
+    """
+    app = pg.mkQApp("Delta Analysis")
+
+    win_combined = pg.GraphicsLayoutWidget(title=title)
+    windows = [win_combined]
+    if not combined_only:
+        win_components = pg.GraphicsLayoutWidget(title="Components")
+        win_stats      = pg.GraphicsLayoutWidget(title="Stats")
+        win_pct        = pg.GraphicsLayoutWidget(title="Pos%")
+        windows += [win_components, win_stats, win_pct]
+    for w in windows:
+        w.setBackground("white")
+
+    p_combined = win_combined.addPlot(row=0, col=0, title=f"{title} State (0..15)")
+    p_combined.showGrid(x=True, y=True, alpha=0.15)
+    p_combined.setLabel("left", "LTP")
+    p_combined.setLabel("bottom", "Tick Index")
+
+    img_combined = pg.ImageItem()
+    img_combined.setLookupTable(FULL_LUT)
+    p_combined.addItem(img_combined)
+    ltp_line_combined = p_combined.plot([], [], pen=pg.mkPen(color=(0, 0, 255), width=2))
+
+    # Buy-vs-sell pos% bias, as its own strip under the price plot. It lives in
+    # a separate plot rather than overlaid on p_combined because the heatmap is
+    # itself red/green, leaving an overlaid ribbon nothing to contrast against.
+    p_ribbon = win_combined.addPlot(row=1, col=0)
+    p_ribbon.setMaximumHeight(RIBBON_HEIGHT_PX)
+    p_ribbon.setXLink(p_combined)
+    p_ribbon.setMouseEnabled(x=True, y=False)
+    p_ribbon.hideAxis("left")
+    # Both axes off: the strip is 100% ribbon, and p_combined already carries
+    # the tick scale it is x-linked to.
+    p_ribbon.hideAxis("bottom")
+    p_ribbon.setYRange(0, 1, padding=0)
+    p_ribbon.getViewBox().setBackgroundColor("w")
+    img_bias = pg.ImageItem()
+    p_ribbon.addItem(img_bias)
+
+    comp_plots, comp_imgs, comp_ltps = [], [], []
+    stat_plots, signal_plots = [], []
+    min_lines, max_lines = [], []
+    bias_line = skew_buy_line = skew_sell_line = skew_legend = None
+
+    if not combined_only:
+        comp_plots, comp_imgs, comp_ltps, stat_plots, signal_plots, min_lines, max_lines, \
+            bias_line, skew_buy_line, skew_sell_line, skew_legend = _build_detail_windows(
+                win_components, win_stats, win_pct, p_combined)
+
     # Spike markers on the combined ("main") graph: one colour per signal,
     # with a legend mapping colour -> signal.
     legend = p_combined.addLegend(offset=(10, 10))
@@ -279,46 +309,16 @@ def build_windows(sync_ranges=False):
         legend.addItem(xc, f"{label} spike (|d1|>{SPIKE_THRESHOLD:g})")
         max_scatters.append(xc)
 
-    master = comp_plots[0]
-    for p in comp_plots[1:]:
-        p.setXLink(master)
-        p.setYLink(master)
-
-    for w in (win_combined, win_components, win_stats, win_pct):
+    for w in windows:
         w.show()
 
     signal_visible = [True]
-
-    toggle_btn = QtWidgets.QPushButton("Hide Cnt")
-    toggle_btn.setCheckable(True)
-
-    def _toggle_signals(checked):
-        visible = not checked
-        signal_visible[0] = visible
-        toggle_btn.setText("Show Cnt" if checked else "Hide Cnt")
-        for sp_cnt, _ in signal_plots:
-            sp_cnt.setVisible(visible)
-
-    toggle_btn.toggled.connect(_toggle_signals)
-    toggle_btn.setFixedWidth(120)
-    toggle_btn.show()
-
-    bias_rolling = [False]
-
-    bias_btn = QtWidgets.QPushButton("Bias: cumulative")
-    bias_btn.setCheckable(True)
-
-    def _toggle_bias(checked):
-        bias_rolling[0] = checked
-        bias_btn.setText(f"Bias: rolling {BIAS_WINDOW}" if checked else "Bias: cumulative")
-
-    bias_btn.toggled.connect(_toggle_bias)
-    bias_btn.setFixedWidth(160)
-    bias_btn.show()
+    bias_rolling = bias_rolling if bias_rolling is not None else [False]
 
     w = {
         "app": app,
-        "windows": (win_combined, win_components, win_stats, win_pct),
+        "windows": tuple(windows),
+        "combined_only": combined_only,
         "p_combined": p_combined,
         "img_combined": img_combined,
         "ltp_line_combined": ltp_line_combined,
@@ -339,15 +339,49 @@ def build_windows(sync_ranges=False):
         "skew_buy_line": skew_buy_line,
         "skew_sell_line": skew_sell_line,
         "skew_legend": skew_legend,
-        # held so Qt doesn't garbage-collect the buttons and their connections
-        "toggle_btn": toggle_btn,
-        "bias_btn": bias_btn,
+        "day_lines": {},
     }
+
+    if not combined_only:
+        _add_buttons(w)
 
     if sync_ranges:
         _link_all_ranges(w)
 
     return w
+
+
+def _add_buttons(w):
+    signal_plots, signal_visible, bias_rolling = w["signal_plots"], w["signal_visible"], w["bias_rolling"]
+
+    toggle_btn = QtWidgets.QPushButton("Hide Cnt")
+    toggle_btn.setCheckable(True)
+
+    def _toggle_signals(checked):
+        visible = not checked
+        signal_visible[0] = visible
+        toggle_btn.setText("Show Cnt" if checked else "Hide Cnt")
+        for sp_cnt, _ in signal_plots:
+            sp_cnt.setVisible(visible)
+
+    toggle_btn.toggled.connect(_toggle_signals)
+    toggle_btn.setFixedWidth(120)
+    toggle_btn.show()
+
+    bias_btn = QtWidgets.QPushButton("Bias: cumulative")
+    bias_btn.setCheckable(True)
+
+    def _toggle_bias(checked):
+        bias_rolling[0] = checked
+        bias_btn.setText(f"Bias: rolling {BIAS_WINDOW}" if checked else "Bias: cumulative")
+
+    bias_btn.toggled.connect(_toggle_bias)
+    bias_btn.setFixedWidth(160)
+    bias_btn.show()
+
+    # held so Qt doesn't garbage-collect the buttons and their connections
+    w["toggle_btn"] = toggle_btn
+    w["bias_btn"] = bias_btn
 
 
 def _link_all_ranges(w):
@@ -373,6 +407,39 @@ def _link_all_ranges(w):
     for p in all_plots:
         p.getViewBox().sigRangeChanged.connect(_sync)
     w["_range_sync"] = _sync  # keep the callback alive
+
+
+def _render_component(w, i, arr_f, code, rect, x_ltp, y_ltp, row_x, min_idx, base_ltp):
+    """Component heatmap, boundary lines and stats plots for one signal."""
+    w["comp_imgs"][i].setImage(_fit_rows(_make_component_map(arr_f, code)), autoLevels=False)
+    w["comp_imgs"][i].setRect(rect)
+    w["comp_ltps"][i].setData(x_ltp, y_ltp)
+
+    has_data = ~np.all(np.isnan(arr_f), axis=1)
+    row_max  = np.full(arr_f.shape[0], np.nan)
+    row_mean = np.full(arr_f.shape[0], np.nan)
+    row_min  = np.full(arr_f.shape[0], np.nan)
+    if has_data.any():
+        row_max[has_data]  = np.nanmax(arr_f[has_data],  axis=1)
+        row_mean[has_data] = np.nanmean(arr_f[has_data], axis=1)
+        row_min[has_data]  = np.nanmin(arr_f[has_data],  axis=1)
+
+    # Min/max active LH/HL boundary lines on the component plot.
+    min_series, max_series = _active_bounds_series(arr_f, min_idx, base_ltp)
+    fin_min, fin_max = np.isfinite(min_series), np.isfinite(max_series)
+    w["min_lines"][i].setData(row_x[fin_min], min_series[fin_min])
+    w["max_lines"][i].setData(row_x[fin_max], max_series[fin_max])
+
+    if has_data.any():
+        xv = row_x[has_data]
+        _, sp_max, sp_mean, sp_min = w["stat_plots"][i]
+        sp_max.setData(xv,  row_max[has_data])
+        sp_mean.setData(xv, row_mean[has_data])
+        sp_min.setData(xv,  row_min[has_data])
+
+        if w["signal_visible"][0]:
+            _, cnt_line = w["signal_plots"][i]
+            cnt_line.setData(xv, (arr_f[has_data] > 0).sum(axis=1))
 
 
 def render(instance, w):
@@ -417,38 +484,17 @@ def render(instance, w):
     arrays = [hl_buy, lh_buy, hl_sell, lh_sell]
     codes  = [8, 4, 2, 1]
     row_x = np.arange(rows_used, dtype=float)
+    detail = not w["combined_only"]
 
     for i, (arr, code) in enumerate(zip(arrays, codes)):
-        w["comp_imgs"][i].setImage(_fit_rows(_make_component_map(arr, code)), autoLevels=False)
-        w["comp_imgs"][i].setRect(rect)
-        w["comp_ltps"][i].setData(x_ltp, y_ltp)
-
         arr_f = arr.astype(float)
+        if detail:
+            _render_component(w, i, arr_f, code, rect, x_ltp, y_ltp, row_x, min_idx, instance.base_ltp)
+
         has_data = ~np.all(np.isnan(arr_f), axis=1)
-        row_max  = np.full(arr_f.shape[0], np.nan)
-        row_mean = np.full(arr_f.shape[0], np.nan)
-        row_min  = np.full(arr_f.shape[0], np.nan)
+        row_max = np.full(arr_f.shape[0], np.nan)
         if has_data.any():
-            row_max[has_data]  = np.nanmax(arr_f[has_data],  axis=1)
-            row_mean[has_data] = np.nanmean(arr_f[has_data], axis=1)
-            row_min[has_data]  = np.nanmin(arr_f[has_data],  axis=1)
-
-        # Min/max active LH/HL boundary lines on the component plot.
-        min_series, max_series = _active_bounds_series(arr_f, min_idx, instance.base_ltp)
-        fin_min, fin_max = np.isfinite(min_series), np.isfinite(max_series)
-        w["min_lines"][i].setData(row_x[fin_min], min_series[fin_min])
-        w["max_lines"][i].setData(row_x[fin_max], max_series[fin_max])
-
-        if has_data.any():
-            xv = row_x[has_data]
-            _, sp_max, sp_mean, sp_min = w["stat_plots"][i]
-            sp_max.setData(xv,  row_max[has_data])
-            sp_mean.setData(xv, row_mean[has_data])
-            sp_min.setData(xv,  row_min[has_data])
-
-            if w["signal_visible"][0]:
-                _, cnt_line = w["signal_plots"][i]
-                cnt_line.setData(xv, (arr_f[has_data] > 0).sum(axis=1))
+            row_max[has_data] = np.nanmax(arr_f[has_data], axis=1)
 
         # Mark ticks where count>0 suddenly drops by more than the
         # threshold on the combined LTP graph, colour-coded per signal.
@@ -471,6 +517,8 @@ def render(instance, w):
     for key, series in (("bias_line", bias),
                         ("skew_buy_line", skew_buy),
                         ("skew_sell_line", skew_sell)):
+        if w[key] is None:
+            continue
         fin = np.isfinite(series)
         w[key].setData(row_x[fin], series[fin])
 
@@ -484,10 +532,27 @@ def render(instance, w):
     w["img_bias"].setRect(QRectF(0, 0, rows_used, 1))
 
 
-def delta_graph(instance):
+def sync_day_lines(w, day_starts):
+    """Dashed vertical line, labelled with the date, where each day starts."""
+    for date_str, idx in day_starts.items():
+        if date_str in w["day_lines"]:
+            continue
+        line = pg.InfiniteLine(
+            pos=float(idx), angle=90, movable=False,
+            pen=pg.mkPen(color=(80, 80, 80), width=1, style=QtCore.Qt.PenStyle.DashLine),
+            label=date_str, labelOpts={"position": 0.04, "color": (60, 60, 60)},
+        )
+        w["p_combined"].addItem(line)
+        w["day_lines"][date_str] = line
+
+
+def delta_graph(instance, multiday=None):
     """
     Launch the live 4-window PyQtGraph visualization.
     Blocks on app.exec() — must be called from the main thread.
+
+    multiday: a live.multiday.MultiDayFeed. Its combined graph opens as its own
+    window once the history has finished loading.
     """
     while instance.curr_time_idx == 0:
         time.sleep(0.05)
@@ -496,7 +561,37 @@ def delta_graph(instance):
     timer = pg.QtCore.QTimer()
     timer.timeout.connect(lambda: render(instance, w))
     timer.start(50)
+
+    if multiday is not None:
+        # Keep the scene and its timer referenced, or Qt drops them.
+        w["multiday"] = _attach_multiday(multiday, w["bias_rolling"])
+
     w["app"].exec()
+
+
+def _attach_multiday(feed, bias_rolling):
+    """Poll until the feed is seeded, then build and drive its combined window."""
+    state = {"w": None}
+    timer = pg.QtCore.QTimer()
+
+    def _tick():
+        if feed.failed:
+            timer.stop()
+            return
+        if feed.instance is None or feed.instance.curr_time_idx == 0:
+            return
+        if state["w"] is None:
+            # Shares the daily scene's rolling/cumulative bias toggle.
+            state["w"] = build_windows(combined_only=True, title="Multi-day Combined",
+                                       bias_rolling=bias_rolling)
+            timer.setInterval(MULTIDAY_REFRESH_MS)
+        sync_day_lines(state["w"], feed.day_starts)
+        render(feed.instance, state["w"])
+
+    timer.timeout.connect(_tick)
+    timer.start(500)
+    state["timer"] = timer
+    return state
 
 
 def show_static(instance):

@@ -4,6 +4,7 @@ from StockAnalyser import Delta_analysis
 from live.ws_producer import start_producer
 from live.delta_consumer import start_consumer
 from live.delta_graph import delta_graph
+from live.multiday import start_multiday
 from live.signal_dashboard import start_dashboard
 
 
@@ -20,12 +21,14 @@ def run():
     r.set('end', 'false')
 
     instance = Delta_analysis()
+    # Second instance: last few trading days + today, for the multi-day graph.
+    multiday, seed_thread = start_multiday()
     producer_thread = start_producer(stock)
-    consumer_thread = start_consumer(stock, instance)
+    consumer_thread = start_consumer(stock, instance, extras=[multiday])
     dashboard_thread = start_dashboard(stock)
 
     try:
-        delta_graph(instance)  # blocks on Qt event loop
+        delta_graph(instance, multiday=multiday)  # blocks on Qt event loop
     except KeyboardInterrupt:
         logging.info("[MAIN] interrupted")
     finally:
